@@ -898,7 +898,7 @@ export default {
           console.log(`处理第 ${i + 1} 帧...`)
           this.currentFrameIndex = i
           
-          const frameCanvas = this.createFrameCanvas(i)
+          const frameCanvas = await this.createFrameCanvas(i)
           
           // modern-gif 需要的格式：直接传递 Canvas 元素
           frames.push({
@@ -944,38 +944,52 @@ export default {
 
         const frame = this.frames[frameIndex]
         
-        // 直接使用已缓存的图片，无需重新加载
+        // 验证图片对象的有效性
+        if (!frame || !frame.img) {
+          throw new Error(`Frame ${frameIndex} or its image is missing`)
+        }
+        
+        // 检查图片是否已完全加载
+        if (!frame.img.complete || frame.img.naturalWidth === 0) {
+          console.warn(`Image for frame ${frameIndex} not fully loaded, reloading...`)
+          
+          // 如果图片没有完全加载，重新加载
+          return new Promise((resolve, reject) => {
+            const img = new Image()
+            img.crossOrigin = 'anonymous'
+            
+            img.onload = () => {
+              try {
+                // 更新缓存的图片对象
+                frame.img = img
+                
+                // 绘制背景图片
+                ctx.drawImage(img, 0, 0, this.canvasSize.width, this.canvasSize.height)
+                
+                // 绘制文字
+                this.drawTextsOnCanvas(ctx, frame.texts)
+                
+                resolve(tempCanvas)
+              } catch (error) {
+                reject(error)
+              }
+            }
+            
+            img.onerror = (error) => {
+              reject(new Error(`Failed to reload image for frame ${frameIndex}: ${frame.src}`))
+            }
+            
+            img.src = frame.src
+          })
+        }
+        
         console.log(`Creating frame canvas ${frameIndex} using cached image`)
         
         // 绘制背景图片（使用已缓存的图片对象）
         ctx.drawImage(frame.img, 0, 0, this.canvasSize.width, this.canvasSize.height)
 
         // 绘制文字
-        frame.texts.forEach((textData) => {
-          ctx.save()
-          ctx.font = `${textData.fontWeight} ${textData.fontSize}px ${textData.fontFamily}`
-          ctx.fillStyle = textData.fill
-          ctx.strokeStyle = textData.stroke
-          ctx.lineWidth = textData.strokeWidth
-          ctx.textAlign = 'left'
-          ctx.textBaseline = 'top'
-
-          // 处理多行文字
-          const lines = textData.text.split('\n')
-          lines.forEach((line, lineIndex) => {
-            const y = textData.top + (lineIndex * textData.fontSize * 1.2)
-            
-            // 如果有描边，先绘制描边
-            if (textData.strokeWidth > 0) {
-              ctx.strokeText(line, textData.left, y)
-            }
-            
-            // 绘制填充文字
-            ctx.fillText(line, textData.left, y)
-          })
-          
-          ctx.restore()
-        })
+        this.drawTextsOnCanvas(ctx, frame.texts)
 
         return tempCanvas
         
@@ -983,6 +997,35 @@ export default {
         console.error('创建画布失败:', error)
         throw error
       }
+    },
+
+    // 辅助方法：在画布上绘制文字
+    drawTextsOnCanvas(ctx, texts) {
+      texts.forEach((textData) => {
+        ctx.save()
+        ctx.font = `${textData.fontWeight} ${textData.fontSize}px ${textData.fontFamily}`
+        ctx.fillStyle = textData.fill
+        ctx.strokeStyle = textData.stroke
+        ctx.lineWidth = textData.strokeWidth
+        ctx.textAlign = 'left'
+        ctx.textBaseline = 'top'
+
+        // 处理多行文字
+        const lines = textData.text.split('\n')
+        lines.forEach((line, lineIndex) => {
+          const y = textData.top + (lineIndex * textData.fontSize * 1.2)
+          
+          // 如果有描边，先绘制描边
+          if (textData.strokeWidth > 0) {
+            ctx.strokeText(line, textData.left, y)
+          }
+          
+          // 绘制填充文字
+          ctx.fillText(line, textData.left, y)
+        })
+        
+        ctx.restore()
+      })
     }
   }
 }
