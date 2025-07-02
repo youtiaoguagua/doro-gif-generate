@@ -70,6 +70,22 @@
 
       <!-- 右侧：文字设置 -->
       <div class="settings-panel">
+        <!-- 项目管理 -->
+        <div class="project-management">
+          <h3>项目管理</h3>
+          <div class="project-buttons">
+            <button @click="showSaveProjectModal" class="btn btn-primary btn-sm">
+              💾 保存项目
+            </button>
+            <button @click="showLoadProjectModal" class="btn btn-info btn-sm">
+              📁 加载项目
+            </button>
+            <button @click="importProject" class="btn btn-secondary btn-sm">
+              📥 导入项目
+            </button>
+          </div>
+        </div>
+
         <h3>文字设置</h3>
         
         <div v-if="selectedTextIndex !== -1" class="text-settings">
@@ -282,6 +298,149 @@
       </div>
     </div>
 
+    <!-- 保存项目模态框 -->
+    <div v-if="showSaveModal" class="modal-overlay" @click="closeSaveModal">
+      <div class="modal-content save-modal" @click.stop>
+        <div class="modal-header">
+          <h3>保存项目</h3>
+          <button @click="closeSaveModal" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <label>项目名称:</label>
+            <input 
+              type="text" 
+              v-model="currentProjectName" 
+              placeholder="请输入项目名称"
+              maxlength="50"
+              @keyup.enter="saveCurrentProject"
+            />
+          </div>
+          <p class="save-info">
+            将保存当前所有帧的文字内容、位置、样式以及全局设置
+          </p>
+          <div class="modal-actions">
+            <button @click="closeSaveModal" class="btn btn-secondary">取消</button>
+            <button @click="saveCurrentProject" class="btn btn-primary" :disabled="!currentProjectName.trim()">
+              💾 保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 加载项目模态框 -->
+    <div v-if="showLoadModal" class="modal-overlay" @click="closeLoadModal">
+      <div class="modal-content load-modal" @click.stop>
+        <div class="modal-header">
+          <h3>加载项目</h3>
+          <button @click="closeLoadModal" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div v-if="savedProjects.length === 0" class="no-projects">
+            <p>暂无保存的项目</p>
+            <p>你可以通过 "导入项目" 导入其他项目文件</p>
+          </div>
+          
+          <div v-else class="projects-list">
+            <div 
+              v-for="(project, index) in savedProjects" 
+              :key="index"
+              class="project-item"
+            >
+              <div class="project-info">
+                <h4>{{ project.name }}</h4>
+                <p class="project-details">
+                  保存时间: {{ formatDate(project.savedAt) }}
+                </p>
+                <p class="project-details">
+                  帧数: {{ project.frames.length }} | 延迟: {{ project.settings.gifDelay }}ms
+                </p>
+              </div>
+                             <div class="project-actions">
+                <button @click="loadProject(project)" class="btn btn-primary btn-sm">
+                  🔄 替换文字加载
+                </button>
+                <button @click="loadProjectDirectly(project)" class="btn btn-success btn-sm">
+                  📁 直接加载
+                </button>
+                <button @click="exportProject(project)" class="btn btn-info btn-sm">
+                  📤 导出
+                </button>
+                <button @click="deleteProject(project, index)" class="btn btn-danger btn-sm">
+                  🗑️ 删除
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeLoadModal" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 文字替换模态框 -->
+    <div v-if="showTextReplaceModal" class="modal-overlay" @click="closeTextReplaceModal">
+      <div class="modal-content text-replace-modal" @click.stop>
+        <div class="modal-header">
+          <h3>文字替换 - {{ selectedProject?.name }}</h3>
+          <button @click="closeTextReplaceModal" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="replace-info">
+            <p>🔄 你可以快速替换项目中的文字内容，保持原有的位置和样式</p>
+            <p>📝 找到 <strong>{{ textReplacements.length }}</strong> 个不同的文字需要替换：</p>
+          </div>
+
+          <div v-if="textReplacements.length > 0" class="text-replacements">
+            <div 
+              v-for="(item, index) in textReplacements" 
+              :key="index"
+              class="replacement-item"
+            >
+              <div class="replacement-row">
+                <div class="original-text">
+                  <label>原文字:</label>
+                  <div class="text-preview">{{ item.preview }}</div>
+                </div>
+                <div class="arrow">→</div>
+                <div class="new-text">
+                  <label>新文字:</label>
+                  <div class="input-group">
+                    <textarea 
+                      v-model="item.replacement" 
+                      placeholder="输入新的文字内容"
+                      rows="2"
+                      maxlength="200"
+                    ></textarea>
+                    <button @click="quickFillText(index)" class="btn btn-outline btn-xs" title="快速填充">
+                      ✏️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else class="no-text">
+            <p>该项目中没有找到文字内容</p>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeTextReplaceModal" class="btn btn-secondary">取消</button>
+            <button @click="loadProjectDirectly(selectedProject)" class="btn btn-outline">
+              📁 不替换，直接加载
+            </button>
+            <button @click="loadProjectWithReplacements" class="btn btn-primary" :disabled="textReplacements.length === 0">
+              🔄 替换并加载
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 页脚 -->
     <div class="footer">
       <p>Powered by <span class="signature">youtiaoguagua</span></p>
@@ -315,6 +474,14 @@ export default {
       showApplyModal: false,
       applyStartFrame: 0,
       applyEndFrame: 0,
+      // 项目保存/加载
+      showSaveModal: false,
+      showLoadModal: false,
+      savedProjects: [],
+      currentProjectName: '',
+      selectedProject: null,
+      showTextReplaceModal: false,
+      textReplacements: [],
       defaultTextStyle: {
         text: '新文字',
         fontSize: 24,
@@ -342,6 +509,9 @@ export default {
   async mounted() {
     console.log('Component mounted, starting frame loading...')
     try {
+      // 加载已保存的项目列表
+      this.loadSavedProjectsList()
+      
       await this.loadFrames()
       console.log('Frames loaded successfully')
       await this.$nextTick() // 确保DOM已渲染
@@ -1031,6 +1201,304 @@ export default {
         
         ctx.restore()
       })
+    },
+
+    // 项目保存/加载功能
+    loadSavedProjectsList() {
+      try {
+        const saved = localStorage.getItem('gif-editor-projects')
+        if (saved) {
+          this.savedProjects = JSON.parse(saved)
+          console.log('已加载保存的项目列表:', this.savedProjects.length, '个项目')
+        }
+      } catch (error) {
+        console.error('加载项目列表失败:', error)
+        this.savedProjects = []
+      }
+    },
+
+    showSaveProjectModal() {
+      this.currentProjectName = ''
+      this.showSaveModal = true
+    },
+
+    showLoadProjectModal() {
+      this.loadSavedProjectsList()
+      this.showLoadModal = true
+    },
+
+    saveCurrentProject() {
+      if (!this.currentProjectName.trim()) {
+        alert('请输入项目名称')
+        return
+      }
+
+      // 保存当前帧的文字状态
+      this.saveCurrentFrameTexts()
+
+      const projectData = {
+        name: this.currentProjectName.trim(),
+        frames: this.frames.map(frame => ({
+          src: frame.src,
+          texts: JSON.parse(JSON.stringify(frame.texts))
+        })),
+        settings: {
+          gifDelay: this.gifDelay,
+          defaultTextStyle: JSON.parse(JSON.stringify(this.defaultTextStyle)),
+          canvasSize: { ...this.canvasSize }
+        },
+        savedAt: new Date().toISOString(),
+        timestamp: Date.now()
+      }
+
+      // 检查是否已存在同名项目
+      const existingIndex = this.savedProjects.findIndex(p => p.name === projectData.name)
+      if (existingIndex !== -1) {
+        if (!confirm(`项目 "${projectData.name}" 已存在，是否覆盖？`)) {
+          return
+        }
+        this.savedProjects[existingIndex] = projectData
+      } else {
+        this.savedProjects.unshift(projectData) // 新项目添加到最前面
+      }
+
+      // 限制保存的项目数量（最多20个）
+      if (this.savedProjects.length > 20) {
+        this.savedProjects = this.savedProjects.slice(0, 20)
+      }
+
+      try {
+        localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
+        console.log('项目保存成功:', projectData.name)
+        alert(`项目 "${projectData.name}" 保存成功！`)
+        this.showSaveModal = false
+      } catch (error) {
+        console.error('保存项目失败:', error)
+        alert('保存失败，可能是存储空间不足')
+      }
+    },
+
+    loadProject(project) {
+      this.selectedProject = project
+      this.prepareTextReplacements(project)
+      this.showLoadModal = false
+      this.showTextReplaceModal = true
+    },
+
+    // 准备文字替换数据
+    prepareTextReplacements(project) {
+      const allTexts = new Set()
+      
+      // 收集所有不重复的文字内容
+      project.frames.forEach(frame => {
+        frame.texts.forEach(text => {
+          allTexts.add(text.text)
+        })
+      })
+
+      // 创建替换映射
+      this.textReplacements = Array.from(allTexts).map(originalText => ({
+        original: originalText,
+        replacement: originalText,
+        preview: originalText.slice(0, 30) + (originalText.length > 30 ? '...' : '')
+      }))
+    },
+
+    // 直接加载项目（不替换文字）
+    loadProjectDirectly(project) {
+      if (!confirm(`确定要加载项目 "${project.name}"？当前未保存的修改将丢失。`)) {
+        return
+      }
+
+      try {
+        this.applyProjectData(project)
+        console.log('项目加载成功:', project.name)
+        alert(`项目 "${project.name}" 加载成功！`)
+        this.showLoadModal = false
+      } catch (error) {
+        console.error('加载项目失败:', error)
+        alert('加载项目失败')
+      }
+    },
+
+    // 带文字替换的加载项目
+    loadProjectWithReplacements() {
+      if (!this.selectedProject) return
+
+      try {
+        // 创建替换映射
+        const replacementMap = {}
+        this.textReplacements.forEach(item => {
+          replacementMap[item.original] = item.replacement
+        })
+
+        // 克隆项目数据并替换文字
+        const modifiedProject = JSON.parse(JSON.stringify(this.selectedProject))
+        modifiedProject.frames.forEach(frame => {
+          frame.texts.forEach(text => {
+            if (replacementMap.hasOwnProperty(text.text)) {
+              text.text = replacementMap[text.text]
+            }
+          })
+        })
+
+        this.applyProjectData(modifiedProject)
+        console.log('项目加载成功（已替换文字）:', this.selectedProject.name)
+        alert(`项目 "${this.selectedProject.name}" 加载成功！文字已替换。`)
+        this.closeTextReplaceModal()
+
+      } catch (error) {
+        console.error('加载项目失败:', error)
+        alert('加载项目失败')
+      }
+    },
+
+    // 应用项目数据到当前编辑器
+    applyProjectData(project) {
+      // 停止播放
+      this.stopPlay()
+
+      // 恢复设置
+      this.gifDelay = project.settings.gifDelay || 80
+      this.defaultTextStyle = { ...project.settings.defaultTextStyle }
+      if (project.settings.canvasSize) {
+        this.canvasSize = { ...project.settings.canvasSize }
+      }
+
+      // 恢复帧数据
+      project.frames.forEach((savedFrame, index) => {
+        if (this.frames[index]) {
+          this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+        }
+      })
+
+      // 重置当前状态
+      this.currentFrameIndex = 0
+      this.selectedTextIndex = -1
+
+      // 重新绘制当前帧
+      if (this.fabricCanvas) {
+        this.drawCurrentFrame()
+      }
+    },
+
+    // 快速填充相同文字
+    quickFillText(index) {
+      const newText = prompt('请输入要填充的文字:')
+      if (newText !== null) {
+        this.textReplacements[index].replacement = newText
+      }
+    },
+
+    // 关闭文字替换模态框
+    closeTextReplaceModal() {
+      this.showTextReplaceModal = false
+      this.selectedProject = null
+      this.textReplacements = []
+    },
+
+    deleteProject(project, index) {
+      if (!confirm(`确定要删除项目 "${project.name}"？此操作不可撤销。`)) {
+        return
+      }
+
+      this.savedProjects.splice(index, 1)
+      
+      try {
+        localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
+        console.log('项目删除成功:', project.name)
+      } catch (error) {
+        console.error('删除项目失败:', error)
+      }
+    },
+
+    exportProject(project) {
+      try {
+        const dataStr = JSON.stringify(project, null, 2)
+        const dataBlob = new Blob([dataStr], { type: 'application/json' })
+        const url = URL.createObjectURL(dataBlob)
+        
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `${project.name}.json`
+        link.click()
+        
+        URL.revokeObjectURL(url)
+        console.log('项目导出成功:', project.name)
+      } catch (error) {
+        console.error('导出项目失败:', error)
+        alert('导出失败')
+      }
+    },
+
+    importProject() {
+      const input = document.createElement('input')
+      input.type = 'file'
+      input.accept = '.json'
+      
+      input.onchange = (e) => {
+        const file = e.target.files[0]
+        if (!file) return
+
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          try {
+            const projectData = JSON.parse(e.target.result)
+            
+            // 验证项目数据格式
+            if (!projectData.name || !projectData.frames || !projectData.settings) {
+              throw new Error('无效的项目文件格式')
+            }
+
+            // 检查是否已存在同名项目
+            const existingIndex = this.savedProjects.findIndex(p => p.name === projectData.name)
+            if (existingIndex !== -1) {
+              if (!confirm(`项目 "${projectData.name}" 已存在，是否覆盖？`)) {
+                return
+              }
+            }
+
+            // 添加导入时间戳
+            projectData.importedAt = new Date().toISOString()
+            
+            if (existingIndex !== -1) {
+              this.savedProjects[existingIndex] = projectData
+            } else {
+              this.savedProjects.unshift(projectData)
+            }
+
+            localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
+            
+            console.log('项目导入成功:', projectData.name)
+            alert(`项目 "${projectData.name}" 导入成功！`)
+            this.loadSavedProjectsList()
+
+          } catch (error) {
+            console.error('导入项目失败:', error)
+            alert('导入失败：文件格式错误或已损坏')
+          }
+        }
+        
+        reader.readAsText(file)
+      }
+      
+      input.click()
+    },
+
+    closeSaveModal() {
+      this.showSaveModal = false
+    },
+
+    closeLoadModal() {
+      this.showLoadModal = false
+    },
+
+    formatDate(dateString) {
+      try {
+        return new Date(dateString).toLocaleString('zh-CN')
+      } catch {
+        return '未知时间'
+      }
     }
   }
 }
@@ -1039,7 +1507,8 @@ export default {
 <style scoped>
 #app {
   font-family: 'Microsoft YaHei', Arial, sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: url('@/assets/bg2.png') repeat;
+  background-size: 250px 250px;
   min-height: 100vh;
   padding: 20px 20px 80px 20px; /* 底部增加80px避免被页脚遮挡 */
 }
@@ -1047,11 +1516,11 @@ export default {
 .header {
   text-align: center;
   color: white;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 
 .header h1 {
-  font-size: 2.5em;
+  font-size: 1.5em;
   margin: 0;
   text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
 }
@@ -1071,7 +1540,7 @@ export default {
 
 .frames-panel {
   width: 200px;
-  background: white;
+  background: rgba(255, 255, 255, 1);
   border-radius: 12px;
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
@@ -1553,16 +2022,266 @@ canvas {
     padding-top: 15px;
   }
 
+/* 项目管理样式 */
+.project-management {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #e9ecef;
+}
+
+.project-management h3 {
+  margin: 0 0 10px 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.project-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.project-buttons .btn {
+  text-align: left;
+  justify-content: flex-start;
+  font-size: 13px;
+  padding: 8px 12px;
+}
+
+/* 保存/加载项目模态框样式 */
+.save-modal, .load-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+.save-info {
+  background: #e8f5e8;
+  padding: 12px;
+  border-radius: 6px;
+  margin: 15px 0;
+  color: #2e7d32;
+  font-size: 14px;
+  border: 1px solid #c8e6c9;
+}
+
+.no-projects {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.no-projects p {
+  margin: 8px 0;
+}
+
+.projects-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.project-item {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 15px;
+}
+
+.project-item:hover {
+  background: #e9ecef;
+  border-color: #007bff;
+}
+
+.project-info {
+  flex: 1;
+}
+
+.project-info h4 {
+  margin: 0 0 8px 0;
+  color: #495057;
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.project-details {
+  margin: 4px 0;
+  color: #6c757d;
+  font-size: 13px;
+}
+
+.project-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex-shrink: 0;
+}
+
+.project-actions .btn {
+  min-width: 60px;
+  text-align: center;
+}
+
+/* 文字替换模态框样式 */
+.text-replace-modal {
+  width: 700px;
+  max-width: 95vw;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.replace-info {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #bbdefb;
+}
+
+.replace-info p {
+  margin: 5px 0;
+  color: #1565c0;
+}
+
+.text-replacements {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8f9fa;
+}
+
+.replacement-item {
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 15px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.replacement-item:last-child {
+  margin-bottom: 0;
+}
+
+.replacement-row {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 15px;
+  align-items: start;
+}
+
+.original-text, .new-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.original-text label, .new-text label {
+  font-weight: 600;
+  color: #495057;
+  font-size: 14px;
+}
+
+.original-text .text-preview {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 8px 12px;
+  color: #6c757d;
+  font-size: 14px;
+  word-break: break-all;
+  max-height: 60px;
+  overflow-y: auto;
+}
+
+.arrow {
+  color: #007bff;
+  font-size: 18px;
+  font-weight: bold;
+  align-self: center;
+  margin-top: 20px;
+}
+
+.input-group {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.input-group textarea {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  font-size: 14px;
+  resize: vertical;
+  min-height: 50px;
+}
+
+.input-group textarea:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.btn-xs {
+  padding: 4px 6px;
+  font-size: 12px;
+  min-width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.no-text {
+  text-align: center;
+  padding: 40px;
+  color: #6c757d;
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+  .text-replace-modal {
+    width: 95vw;
+    margin: 10px;
+  }
+  
+  .replacement-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  
+  .arrow {
+    text-align: center;
+    margin: 5px 0;
+    transform: rotate(90deg);
+  }
+  
+  .input-group {
+    flex-direction: column;
+  }
+  
+  .btn-xs {
+    align-self: flex-start;
+  }
+}
+
 /* 页脚样式 */
 .footer {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 10px 20px;
+  padding: 6px 20px;
   text-align: center;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 14px;
+  font-size: 12px;
   background: rgba(0, 0, 0, 0.2);
   backdrop-filter: blur(10px);
   border-top: 1px solid rgba(255, 255, 255, 0.1);
@@ -1577,11 +2296,11 @@ canvas {
   color: #ffffff;
   font-weight: 600;
   /* text-shadow: 1px 1px 2px rgba(0,0,0,0.3); */
-  background: #000;
+  background: #f0f0f0;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  font-size: 16px;
+  font-size: 12px;
   letter-spacing: 1px;
 }
 
