@@ -25,8 +25,11 @@
       <!-- 中间：编辑区域 -->
       <div class="editor-panel">
         <div class="editor-header">
-          <h3>编辑帧 {{ currentFrameIndex + 1 }}</h3>
+          <h3>编辑帧 {{ currentFrameIndex + 1 }} {{ hasCustomImages ? '(自定义图片)' : '(默认图片)' }}</h3>
           <div class="controls">
+            <button @click="showImageUpload" class="btn btn-info">
+              <span>🖼️</span> 上传图片
+            </button>
             <button @click="addText" class="btn btn-primary">
               <span>➕</span> 添加文字
             </button>
@@ -82,6 +85,12 @@
             </button>
             <button @click="importProject" class="btn btn-secondary btn-sm">
               📥 导入项目
+            </button>
+            <button @click="showCloudPresets" class="btn btn-success btn-sm">
+                              ⭐ 精选预设
+            </button>
+            <button @click="showUploadPreset" class="btn btn-warning btn-sm">
+              📤 分享预设
             </button>
           </div>
         </div>
@@ -441,6 +450,199 @@
       </div>
     </div>
 
+            <!-- 精选预设浏览模态框 -->
+    <div v-if="showCloudModal" class="modal-overlay" @click="closeCloudModal">
+      <div class="modal-content cloud-modal" @click.stop>
+        <div class="modal-header">
+          <h3>⭐ 精选预设库</h3>
+          <button @click="closeCloudModal" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="cloud-info">
+            <p>🌟 发现和下载其他用户分享的精美模板</p>
+          </div>
+
+          <div v-if="isLoadingCloud" class="loading">
+            <p>🔄 正在加载精选预设...</p>
+          </div>
+
+          <div v-else-if="cloudPresets.length === 0" class="no-cloud-presets">
+            <p>😔 暂无精选预设</p>
+            <p>成为第一个分享预设的用户吧！</p>
+          </div>
+
+          <div v-else class="cloud-presets-grid">
+            <div 
+              v-for="preset in cloudPresets" 
+              :key="preset.id"
+              class="preset-card"
+              @click="showPresetDetails(preset)"
+            >
+              <div class="preset-card-preview">
+                <img 
+                  v-if="preset.previewGif" 
+                  :src="preset.previewGif" 
+                  alt="预设预览" 
+                  class="card-gif-preview" 
+                />
+                <div v-else class="no-preview">🎞️</div>
+                
+                <div class="preset-card-overlay">
+                  <div class="quick-stats">
+                    <span class="downloads">📥 {{ preset.downloads }}</span>
+                    <span class="frames">{{ preset.frames }}帧</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="preset-card-content">
+                <h4 class="preset-card-title">{{ preset.name }}</h4>
+                <p class="preset-card-description">{{ preset.description }}</p>
+                
+
+                
+                <div class="preset-card-footer">
+                  <span class="preset-author">👤 {{ preset.author }}</span>
+                  <div class="preset-card-actions" @click.stop>
+                    <button @click="downloadCloudPreset(preset)" class="btn-icon" title="下载预设">
+                      📥
+                    </button>
+                    <button @click="deleteCloudPreset(preset)" class="btn-icon btn-danger" title="删除预设">
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeCloudModal" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上传预设模态框 -->
+    <div v-if="showUploadModal" class="modal-overlay" @click="closeUploadModal">
+      <div class="modal-content upload-modal" @click.stop>
+        <div class="modal-header">
+          <h3>⭐ 分享到精选预设</h3>
+          <button @click="closeUploadModal" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="upload-info">
+            <p>🌟 将你的创意分享给全世界！</p>
+            <p>📝 当前项目包含 {{ frames.length }} 帧和 {{ frames.reduce((total, frame) => total + frame.texts.length, 0) }} 个文字</p>
+          </div>
+
+          <div class="upload-form">
+            <div class="upload-preview-section">
+              <div class="current-gif-preview">
+                <h4>预设预览:</h4>
+                <div class="gif-preview-container" ref="previewContainer">
+                  <canvas ref="previewCanvas" class="preview-canvas" style="display: none;"></canvas>
+                  <div class="preview-loading">🔄 正在生成预览...</div>
+                </div>
+              </div>
+              
+              <div class="upload-details">
+                <div class="setting-group">
+                  <label>预设标题 *:</label>
+                  <input 
+                    type="text"
+                    v-model="uploadTitle" 
+                    placeholder="给你的预设起个好听的名字..."
+                    maxlength="50"
+                    required
+                  />
+                  <small>{{ uploadTitle.length }}/50 字符</small>
+                </div>
+
+                <div class="setting-group">
+                  <label>预设描述 *:</label>
+                  <textarea 
+                    v-model="uploadDescription" 
+                    placeholder="请描述这个预设的用途和特点..."
+                    rows="3"
+                    maxlength="200"
+                    required
+                  ></textarea>
+                  <small>{{ uploadDescription.length }}/200 字符</small>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeUploadModal" class="btn btn-secondary">取消</button>
+            <button 
+              @click="uploadCurrentProject" 
+              class="btn btn-success" 
+              :disabled="!uploadTitle.trim() || !uploadDescription.trim() || isUploading"
+            >
+              {{ isUploading ? '⭐ 分享中...' : '⭐ 分享到精选' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图片上传模态框 -->
+    <div v-if="showUploadImageModal" class="modal-overlay" @click="closeImageUpload">
+      <div class="modal-content upload-image-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🖼️ 上传自定义图片</h3>
+          <button @click="closeImageUpload" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="upload-image-info">
+            <p>🎨 上传你自己的图片来创建独特的 GIF！</p>
+            <p>🎞️ <strong>GIF 文件</strong>：自动解析所有帧，保持原始动画效果</p>
+            <p>🖼️ <strong>静态图片</strong>：PNG、JPG 等格式，建议尺寸：400x400 像素</p>
+          </div>
+
+          <div v-if="isProcessingImage" class="processing">
+            <p>🔄 正在处理图片，请稍候...</p>
+          </div>
+
+          <div v-else class="upload-zone">
+            <input 
+              type="file" 
+              ref="imageInput"
+              @change="handleImageUpload"
+              accept="image/*"
+              style="display: none"
+            />
+            <div 
+              class="drop-zone"
+              @click="$refs.imageInput.click()"
+              @dragover.prevent
+              @drop.prevent="handleImageDrop"
+            >
+              <div class="drop-content">
+                <span class="upload-icon">📁</span>
+                <p>点击选择图片或拖拽到此处</p>
+                <small>支持动态 GIF（自动解析帧）、PNG、JPG 格式</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="current-image-info" v-if="hasCustomImages">
+            <h4>当前图片信息:</h4>
+            <p>类型: {{ getImageTypeDisplay() }}</p>
+            <p>尺寸: {{ canvasSize.width }}x{{ canvasSize.height }}</p>
+            <p>帧数: {{ frames.length }}</p>
+            <p v-if="originalImageData?.gifInfo">原始 GIF: {{ originalImageData.gifInfo.frameCount }} 帧</p>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeImageUpload" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 页脚 -->
     <div class="footer">
       <p>Powered by <span class="signature">youtiaoguagua</span></p>
@@ -452,6 +654,9 @@
 import { Canvas, FabricText, FabricImage } from 'fabric'
 import { encode } from 'modern-gif'
 import { saveAs } from 'file-saver'
+import { parseGIF, decompressFrames } from 'gifuct-js'
+import axios from 'axios'
+import { GifReader } from 'omggif'
 
 export default {
   name: 'App',
@@ -482,6 +687,22 @@ export default {
       selectedProject: null,
       showTextReplaceModal: false,
       textReplacements: [],
+      // 精选预设功能
+      showCloudModal: false,
+      cloudPresets: [],
+      isLoadingCloud: false,
+      showUploadModal: false,
+      uploadTitle: '',
+      uploadDescription: '',
+      isUploading: false,
+      // 图片上传功能
+      showUploadImageModal: false,
+      isProcessingImage: false,
+      hasCustomImages: false,
+      originalImageData: null, // 存储原始图片数据用于分享
+      defaultImageSrc: '/preset/kick.gif', // 默认图片路径 (public 目录)
+      // Cloudflare Worker 配置
+              workerApiUrl: 'https://doro-api.20491504.xyz', // Cloudflare Worker API 域名
       defaultTextStyle: {
         text: '新文字',
         fontSize: 24,
@@ -542,38 +763,1566 @@ export default {
   },
   methods: {
     async loadFrames() {
-      // 使用public目录中的图片
-      const frameCount = 19
+      console.log('开始加载帧...')
       
-      for (let i = 0; i < frameCount; i++) {
+      // 如果有自定义图片数据，使用自定义图片
+      if (this.originalImageData && this.originalImageData.frames) {
+        console.log('使用自定义图片数据')
+        this.frames = []
+        
         try {
-          const frameNumber = i.toString().padStart(2, '0')
-          const framePath = `/doro/frame_${frameNumber}_delay-0.08s.png`
-          
-          const img = new Image()
-          img.src = framePath
-          
-          await new Promise((resolve, reject) => {
-            img.onload = resolve
-            img.onerror = (e) => {
-              console.error(`Failed to load image: ${framePath}`, e)
-              reject(e)
-            }
-          })
-          
-          this.frames.push({
-            src: framePath,
-            img: img,
-            texts: []
-          })
-          
-          console.log(`Loaded frame ${i}: ${framePath}`)
+          for (let i = 0; i < this.originalImageData.frames.length; i++) {
+            const frameData = this.originalImageData.frames[i]
+            const img = new Image()
+            img.src = frameData.dataUrl
+            
+            await new Promise((resolve, reject) => {
+              img.onload = resolve
+              img.onerror = reject
+            })
+            
+            this.frames.push({
+              src: frameData.dataUrl,
+              img: img,
+              texts: frameData.texts || []
+            })
+          }
+          console.log(`Loaded ${this.frames.length} custom frames`)
+          return
         } catch (error) {
-          console.error(`Failed to load frame ${i}:`, error)
+          console.error('自定义图片加载失败:', error)
+          // 重置自定义图片数据，回退到默认
+          this.originalImageData = null
+          this.hasCustomImages = false
+        }
+      }
+
+      // 使用默认图片 - 尝试加载 kick.gif 并解析帧
+      try {
+        console.log('尝试加载默认图片...')
+        await this.loadDefaultFrames()
+        console.log('默认图片加载成功')
+      } catch (error) {
+        console.error('Failed to load default frames:', error)
+        console.log('回退到 kick.gif...')
+        // 如果默认图片失败，fallback 到 kick.gif
+        await this.loadDoroFrames()
+      }
+      
+      // 最终检查
+      if (this.frames.length === 0) {
+        console.error('所有图片加载都失败了，创建空白帧')
+        await this.createEmptyFrames()
+      }
+    },
+
+    // 创建空白帧作为最后的备用方案
+    async createEmptyFrames() {
+      console.log('创建空白帧作为备用')
+      this.frames = []
+      this.canvasSize = { width: 400, height: 400 }
+      
+      // 创建一个白色的空白图片
+      const canvas = document.createElement('canvas')
+      canvas.width = 400
+      canvas.height = 400
+      const ctx = canvas.getContext('2d')
+      ctx.fillStyle = '#FFFFFF'
+      ctx.fillRect(0, 0, 400, 400)
+      
+      const dataUrl = canvas.toDataURL('image/png')
+      
+      // 创建 19 帧空白图片
+      for (let i = 0; i < 19; i++) {
+        const img = new Image()
+        img.src = dataUrl
+        
+        await new Promise((resolve) => {
+          img.onload = resolve
+          img.onerror = resolve // 即使失败也继续
+        })
+        
+        this.frames.push({
+          src: dataUrl,
+          img: img,
+          texts: []
+        })
+      }
+      
+      console.log(`创建了 ${this.frames.length} 个空白帧`)
+    },
+
+    async loadDefaultFrames() {
+      // 尝试加载默认的 kick.gif
+      // 使用优化的处理方式
+      try {
+        console.log('🎞️ 加载默认 GIF:', this.defaultImageSrc)
+        console.log('📡 完整 URL:', window.location.origin + this.defaultImageSrc)
+        
+        const response = await axios.get(this.defaultImageSrc, {
+          responseType: 'arraybuffer',
+          headers: {
+            'Accept': 'image/gif,image/*,*/*'
+          }
+        })
+        
+        console.log('📥 默认图片响应:', {
+          status: response.status,
+          dataLength: response.data.byteLength,
+          contentType: response.headers['content-type']
+        })
+        
+        if (response.status !== 200 || response.data.byteLength === 0) {
+          throw new Error(`默认图片加载失败: ${response.status}`)
+        }
+        
+        // 转换为 Blob 并使用优化处理
+        const blob = new Blob([response.data], { type: 'image/gif' })
+        console.log('🔄 创建 blob:', blob.size, 'bytes')
+        
+        // 使用优化的前端 GIF 处理
+        console.log('🎯 使用前端 GIF 处理方式')
+        await this.processGifOptimized(blob, false) // false 表示不是用户上传
+        
+        console.log('✅ 默认图片处理成功')
+      } catch (error) {
+        console.error('❌ 默认图片加载失败:', error)
+        throw error
+      }
+    },
+
+    async loadDoroFrames() {
+      // 使用 kick.gif 作为默认图片
+      console.log('开始加载默认 kick.gif...')
+      
+      try {
+        // 直接处理 kick.gif 文件
+        const response = await fetch('/preset/kick.gif')
+        if (!response.ok) {
+          throw new Error(`无法加载 kick.gif: ${response.status}`)
+        }
+        
+        const gifBlob = await response.blob()
+        console.log('✅ kick.gif 加载成功:', gifBlob.size, 'bytes')
+        
+        // 使用真正的拆帧方法处理 kick.gif
+        const arrayBuffer = await gifBlob.arrayBuffer()
+        await this.processGifOptimized(gifBlob, false)
+        
+        console.log(`✅ 默认图片加载完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('❌ 加载 kick.gif 失败:', error)
+        
+        // 如果 kick.gif 也失败，创建空白帧
+        await this.createEmptyFrames()
+      }
+    },
+
+    // 图片上传和处理功能
+    showImageUpload() {
+      this.showUploadImageModal = true
+    },
+
+    closeImageUpload() {
+      this.showUploadImageModal = false
+    },
+
+    handleImageUpload(event) {
+      const file = event.target.files[0]
+      if (file) {
+        this.processImageFile(file, true) // true 表示用户上传
+      }
+    },
+
+    handleImageDrop(event) {
+      const files = event.dataTransfer.files
+      if (files.length > 0) {
+        this.processImageFile(files[0], true)
+      }
+    },
+
+    getImageTypeDisplay() {
+      if (!this.originalImageData) return '自定义'
+      
+      switch (this.originalImageData.type) {
+        case 'gif-omggif':
+          return '动态 GIF（omggif解析）'
+        case 'gif-supergif':
+          return '动态 GIF（SuperGif解析）'
+        case 'gif-gifuct':
+          return '动态 GIF（完整解析）'
+        case 'gif-simple':
+          return '动态 GIF（简化处理）'
+        case 'gif-worker-processed':
+          return '动态 GIF（后端处理）'
+        case 'gif-optimized':
+          return '动态 GIF（优化处理）'
+        case 'image':
+          return '静态图片'
+        default:
+          return '自定义'
+      }
+    },
+
+    async processImageFile(file, isUserUpload = true) {
+      this.isProcessingImage = true
+      
+      try {
+        console.log('开始处理图片文件:', file.name, file.type)
+        const fileType = file.type || 'image/gif'
+        
+        if (fileType.includes('gif')) {
+          console.log('检测到 GIF 文件，使用前端处理')
+          await this.processGifOptimized(file, isUserUpload)
+        } else {
+          console.log('检测到静态图片，使用单图处理')
+          await this.processSingleImage(file, isUserUpload)
+        }
+        
+        // 检查是否成功处理了图片
+        if (this.frames.length === 0) {
+          throw new Error('图片处理后没有生成任何帧')
+        }
+        
+        if (isUserUpload) {
+          this.hasCustomImages = true
+          this.showUploadImageModal = false
+          console.log('图片处理成功，重新初始化画布')
+          
+          // 重新初始化画布
+          await this.$nextTick()
+          this.initCanvas()
+        }
+        
+        console.log(`图片处理完成，共 ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('Error processing image:', error)
+        
+        // 如果是用户上传，重置状态并提示错误
+        if (isUserUpload) {
+          this.hasCustomImages = false
+          this.originalImageData = null
+          alert(`图片处理失败: ${error.message}。请尝试其他图片或格式。`)
+          
+          // 如果当前没有任何帧，回退到默认图片
+          if (this.frames.length === 0) {
+            console.log('回退到默认图片...')
+            try {
+              await this.loadDoroFrames()
+              await this.$nextTick()
+              this.initCanvas()
+            } catch (fallbackError) {
+              console.error('回退到默认图片也失败:', fallbackError)
+              await this.createEmptyFrames()
+              await this.$nextTick()
+              this.initCanvas()
+            }
+          }
         }
       }
       
-      console.log(`Total frames loaded: ${this.frames.length}`)
+      this.isProcessingImage = false
+    },
+
+    // 已删除旧的 processGif 方法，现在使用 processGifOptimized
+
+    // 已删除 Worker API 处理方法，现在使用前端处理
+
+    // 优化的客户端 GIF 处理 - 使用omggif作为首选方案
+    async processGifOptimized(dataSource, isUserUpload = true) {
+      console.log('🎨 开始优化的 GIF 处理...')
+      
+      let arrayBuffer
+      
+      // 处理不同的数据源
+      if (typeof dataSource === 'string' && dataSource.startsWith('data:')) {
+        // base64 数据
+        console.log('📋 处理 base64 数据')
+        const response = await fetch(dataSource)
+        arrayBuffer = await response.arrayBuffer()
+      } else if (dataSource instanceof File || dataSource instanceof Blob) {
+        // 文件或 Blob
+        console.log('📁 处理文件数据')
+        arrayBuffer = await dataSource.arrayBuffer()
+      } else {
+        throw new Error('不支持的数据源类型')
+      }
+      
+      try {
+        // 首先尝试使用omggif拆分GIF
+        console.log('🚀 尝试使用omggif拆分GIF...')
+        await this.processGifWithOmggif(arrayBuffer, isUserUpload)
+        console.log('✅ omggif拆分成功')
+        
+      } catch (omggifError) {
+        console.warn('⚠️ omggif 拆分失败，尝试SuperGif方案:', omggifError.message)
+        
+        try {
+          // 尝试SuperGif方案
+          await this.processGifFramesCorrectly(arrayBuffer, isUserUpload)
+          console.log('✅ SuperGif拆分成功')
+        } catch (gifError) {
+          console.warn('⚠️ SuperGif 拆分失败，尝试 gifuct-js 简化方案:', gifError.message)
+          
+          try {
+            // 尝试使用 gifuct-js 的简化方案
+            await this.processGifWithGifuctSimple(arrayBuffer, isUserUpload)
+          } catch (secondError) {
+            console.warn('⚠️ gifuct-js 也失败，使用单帧备用方案:', secondError.message)
+            // 如果拆分失败，使用单帧方案
+            await this.processGifWithNativeVariations(new Blob([arrayBuffer], { type: 'image/gif' }), isUserUpload)
+          }
+        }
+      }
+    },
+
+    // 使用omggif进行GIF帧拆分
+    async processGifWithOmggif(arrayBuffer, isUserUpload = true) {
+      console.log('🚀 使用omggif解析GIF...')
+      
+      try {
+        // 创建Uint8Array用于omggif
+        const bytes = new Uint8Array(arrayBuffer)
+        
+        // 创建GifReader实例
+        const gifReader = new GifReader(bytes)
+        
+        console.log(`📊 GIF信息: ${gifReader.width}x${gifReader.height}, ${gifReader.numFrames()} 帧`)
+        
+        if (gifReader.numFrames() === 0) {
+          throw new Error('GIF没有帧数据')
+        }
+        
+        // 更新画布尺寸
+        this.canvasSize.width = gifReader.width
+        this.canvasSize.height = gifReader.height
+        
+        // 清空现有帧
+        this.frames = []
+        const processedFrames = []
+        
+        // 创建累积画布
+        const accumulatedCanvas = document.createElement('canvas')
+        accumulatedCanvas.width = gifReader.width
+        accumulatedCanvas.height = gifReader.height
+        const accumulatedCtx = accumulatedCanvas.getContext('2d')
+        
+        // 设置白色背景
+        accumulatedCtx.fillStyle = '#FFFFFF'
+        accumulatedCtx.fillRect(0, 0, accumulatedCanvas.width, accumulatedCanvas.height)
+        
+        // 处理每一帧
+        for (let i = 0; i < Math.min(gifReader.numFrames(), 50); i++) {
+          console.log(`🖼️ 处理第 ${i + 1}/${gifReader.numFrames()} 帧`)
+          
+          try {
+            // 获取帧信息
+            const frameInfo = gifReader.frameInfo(i)
+            console.log(`帧 ${i + 1} 信息:`, frameInfo)
+            
+            // GIF格式中延迟是以1/100秒为单位，转换为毫秒
+            const frameDelay = (frameInfo.delay || 10) * 10 // 默认10/100秒 = 100毫秒
+            console.log(`帧 ${i + 1} 延迟: ${frameInfo.delay}/100秒 = ${frameDelay}ms`)
+            
+            // 创建像素数据数组
+            const pixelData = new Uint8ClampedArray(gifReader.width * gifReader.height * 4)
+            
+            // 解码帧数据
+            gifReader.decodeAndBlitFrameRGBA(i, pixelData)
+            
+            // 创建ImageData
+            const imageData = new ImageData(pixelData, gifReader.width, gifReader.height)
+            
+            // 根据disposal方法处理前一帧
+            if (i > 0) {
+              const prevFrameInfo = gifReader.frameInfo(i - 1)
+              if (prevFrameInfo.disposal === 2) {
+                // 清除到背景色
+                accumulatedCtx.fillStyle = '#FFFFFF'
+                accumulatedCtx.fillRect(0, 0, accumulatedCanvas.width, accumulatedCanvas.height)
+              } else if (prevFrameInfo.disposal === 3) {
+                // 恢复到前一状态 - 简化处理
+                console.log('TODO: 处理disposal type 3')
+              }
+            }
+            
+            // 创建临时画布绘制当前帧
+            const frameCanvas = document.createElement('canvas')
+            frameCanvas.width = gifReader.width
+            frameCanvas.height = gifReader.height
+            const frameCtx = frameCanvas.getContext('2d')
+            
+            frameCtx.putImageData(imageData, 0, 0)
+            
+            // 将帧绘制到累积画布
+            accumulatedCtx.drawImage(frameCanvas, 0, 0)
+            
+            // 创建输出画布
+            const outputCanvas = document.createElement('canvas')
+            outputCanvas.width = gifReader.width
+            outputCanvas.height = gifReader.height
+            const outputCtx = outputCanvas.getContext('2d')
+            outputCtx.drawImage(accumulatedCanvas, 0, 0)
+            
+            // 转换为DataURL
+            const dataUrl = outputCanvas.toDataURL('image/png')
+            
+            // 创建图片对象
+            const img = new Image()
+            img.src = dataUrl
+            
+            // 等待图片加载
+            await new Promise((resolve) => {
+              img.onload = resolve
+              img.onerror = resolve
+            })
+            
+            // 添加到帧列表
+            this.frames.push({
+              src: dataUrl,
+              img: img,
+              texts: [],
+              delay: frameDelay
+            })
+            
+            processedFrames.push({
+              dataUrl: dataUrl,
+              texts: [],
+              delay: frameDelay
+            })
+            
+            console.log(`✅ 第 ${i + 1} 帧处理完成`)
+            
+          } catch (frameError) {
+            console.error(`❌ 第 ${i + 1} 帧处理失败:`, frameError)
+            // 继续处理下一帧
+          }
+        }
+        
+        if (this.frames.length === 0) {
+          throw new Error('没有成功处理任何帧')
+        }
+        
+        // 保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-omggif',
+            frames: processedFrames,
+            originalBlob: arrayBuffer,
+            gifInfo: {
+              width: gifReader.width,
+              height: gifReader.height,
+              frameCount: this.frames.length,
+              originalFrameCount: gifReader.numFrames()
+            }
+          }
+        }
+        
+        // 计算所有帧延迟的平均值作为全局延迟
+        const totalDelay = this.frames.reduce((sum, frame) => sum + frame.delay, 0)
+        const averageDelay = Math.round(totalDelay / this.frames.length) || 80
+        this.gifDelay = averageDelay
+        
+        console.log(`📊 延迟统计: 总延迟=${totalDelay}ms, 平均延迟=${averageDelay}ms`)
+        
+        console.log(`✅ omggif拆分完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('❌ omggif处理失败:', error)
+        throw error
+      }
+    },
+
+    // 使用 gifuct-js 进行真正的 GIF 帧解析（优化版）
+    async processGifWithGifuct(arrayBuffer, isUserUpload = true) {
+      console.log('🎬 使用 gifuct-js 解析 GIF...')
+      
+      try {
+        // 使用 gifuct-js 解析 GIF
+        const gif = parseGIF(arrayBuffer)
+        const frames = decompressFrames(gif, true)
+        
+        console.log(`📊 GIF 信息: ${gif.lsd.width}x${gif.lsd.height}, ${frames.length} 帧`)
+        
+        if (!frames || frames.length === 0) {
+          throw new Error('GIF 帧数为 0')
+        }
+        
+        // 更新画布尺寸
+        this.canvasSize.width = gif.lsd.width
+        this.canvasSize.height = gif.lsd.height
+        
+        // 清空现有帧
+        this.frames = []
+        const processedFrames = []
+        
+        // 创建一个累积画布用于处理帧叠加
+        const accumulatedCanvas = document.createElement('canvas')
+        accumulatedCanvas.width = gif.lsd.width
+        accumulatedCanvas.height = gif.lsd.height
+        const accumulatedCtx = accumulatedCanvas.getContext('2d')
+        
+        // 使用全局背景色或白色
+        const bgColor = gif.lsd.backgroundColorIndex !== undefined && gif.gct 
+          ? gif.gct[gif.lsd.backgroundColorIndex] 
+          : [255, 255, 255]
+        accumulatedCtx.fillStyle = `rgb(${bgColor[0]},${bgColor[1]},${bgColor[2]})`
+        accumulatedCtx.fillRect(0, 0, accumulatedCanvas.width, accumulatedCanvas.height)
+        
+        // 处理每一帧
+        for (let i = 0; i < Math.min(frames.length, 50); i++) {
+          const frame = frames[i]
+          
+          console.log(`🖼️ 处理第 ${i + 1} 帧，disposal: ${frame.disposalType}`)
+          
+          try {
+            // 根据 disposal 方法处理前一帧
+            if (i > 0) {
+              const prevFrame = frames[i - 1]
+              if (prevFrame.disposalType === 2) {
+                // 恢复背景色
+                accumulatedCtx.fillStyle = `rgb(${bgColor[0]},${bgColor[1]},${bgColor[2]})`
+                accumulatedCtx.fillRect(prevFrame.dims.left, prevFrame.dims.top, 
+                                      prevFrame.dims.width, prevFrame.dims.height)
+              } else if (prevFrame.disposalType === 3) {
+                // 恢复到前一帧状态 - 这里简化处理
+                console.log('TODO: 处理 disposal type 3')
+              }
+              // disposalType 0 或 1: 保持当前状态，不需要处理
+            }
+            
+            // 渲染当前帧
+            const colorTable = frame.colorTable || gif.gct
+            
+            if (frame.patch && colorTable) {
+              // 创建当前帧的 ImageData
+              const frameImageData = accumulatedCtx.createImageData(frame.dims.width, frame.dims.height)
+              
+              // 填充像素数据
+              for (let pixelIndex = 0; pixelIndex < frame.patch.length; pixelIndex++) {
+                const colorIndex = frame.patch[pixelIndex]
+                const dataIndex = pixelIndex * 4
+                
+                if (dataIndex < frameImageData.data.length - 3) {
+                  if (colorIndex === frame.transparentIndex) {
+                    // 透明像素 - 设置为完全透明
+                    frameImageData.data[dataIndex] = 0
+                    frameImageData.data[dataIndex + 1] = 0
+                    frameImageData.data[dataIndex + 2] = 0
+                    frameImageData.data[dataIndex + 3] = 0
+                  } else if (colorIndex < colorTable.length) {
+                    // 正常颜色
+                    const color = colorTable[colorIndex]
+                    frameImageData.data[dataIndex] = color[0]     // R
+                    frameImageData.data[dataIndex + 1] = color[1] // G
+                    frameImageData.data[dataIndex + 2] = color[2] // B
+                    frameImageData.data[dataIndex + 3] = 255      // A
+                  } else {
+                    // 无效颜色索引，设置为背景色
+                    frameImageData.data[dataIndex] = bgColor[0]
+                    frameImageData.data[dataIndex + 1] = bgColor[1]
+                    frameImageData.data[dataIndex + 2] = bgColor[2]
+                    frameImageData.data[dataIndex + 3] = 255
+                  }
+                }
+              }
+              
+              // 将帧数据绘制到累积画布
+              const tempCanvas = document.createElement('canvas')
+              tempCanvas.width = frame.dims.width
+              tempCanvas.height = frame.dims.height
+              const tempCtx = tempCanvas.getContext('2d')
+              tempCtx.putImageData(frameImageData, 0, 0)
+              
+              // 使用 globalCompositeOperation 处理透明度
+              accumulatedCtx.save()
+              accumulatedCtx.globalCompositeOperation = 'source-over'
+              accumulatedCtx.drawImage(tempCanvas, frame.dims.left, frame.dims.top)
+              accumulatedCtx.restore()
+            }
+            
+            // 创建当前完整帧的 canvas
+            const outputCanvas = document.createElement('canvas')
+            outputCanvas.width = gif.lsd.width
+            outputCanvas.height = gif.lsd.height
+            const outputCtx = outputCanvas.getContext('2d')
+            outputCtx.drawImage(accumulatedCanvas, 0, 0)
+            
+            // 转换为 DataURL
+            const dataUrl = outputCanvas.toDataURL('image/png')
+            
+            // 创建图片对象
+            const img = new Image()
+            img.src = dataUrl
+            
+            await new Promise((resolve) => {
+              img.onload = resolve
+              img.onerror = resolve
+            })
+            
+            // 添加到帧列表
+            this.frames.push({
+              src: dataUrl,
+              img: img,
+              texts: []
+            })
+            
+            processedFrames.push({
+              dataUrl: dataUrl,
+              texts: []
+            })
+            
+          } catch (frameError) {
+            console.warn(`第 ${i + 1} 帧处理失败:`, frameError)
+            // 继续处理下一帧
+          }
+        }
+        
+        if (this.frames.length === 0) {
+          throw new Error('没有成功处理任何帧')
+        }
+        
+        // 保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-gifuct',
+            frames: processedFrames,
+            originalBlob: arrayBuffer,
+            gifInfo: {
+              width: gif.lsd.width,
+              height: gif.lsd.height,
+              frameCount: this.frames.length
+            }
+          }
+        }
+        
+        // 计算所有帧延迟的平均值作为全局延迟 (gifuct-js 延迟单位是1/100秒)
+        const totalDelay = frames.reduce((sum, frame) => sum + (frame.delay * 10), 0)
+        const averageDelay = Math.round(totalDelay / frames.length) || 80
+        this.gifDelay = averageDelay
+        
+        console.log(`📊 延迟统计: 总延迟=${totalDelay}ms, 平均延迟=${averageDelay}ms`)
+        console.log(`✅ GIF 处理完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('❌ gifuct-js 处理失败:', error)
+        throw error
+      }
+    },
+
+    // 简化版 GIF 解析 - 直接使用 gifuct-js 的结果
+    async processGifWithSimpleGifuct(arrayBuffer, isUserUpload = true) {
+      console.log('🎬 简化版 GIF 解析开始...')
+      
+      try {
+        // 解析 GIF
+        const gif = parseGIF(arrayBuffer)
+        const frames = decompressFrames(gif, true)
+        
+        console.log(`📊 解析到 ${frames.length} 帧，尺寸: ${gif.lsd.width}x${gif.lsd.height}`)
+        
+        if (!frames || frames.length === 0) {
+          throw new Error('没有可用的帧')
+        }
+        
+        // 更新画布尺寸
+        this.canvasSize.width = gif.lsd.width
+        this.canvasSize.height = gif.lsd.height
+        
+        // 清空现有帧
+        this.frames = []
+        const processedFrames = []
+        
+        // 使用更简单的方式处理每一帧
+        for (let i = 0; i < Math.min(frames.length, 30); i++) {
+          const frame = frames[i]
+          
+          console.log(`🖼️ 处理第 ${i + 1} 帧`)
+          
+          try {
+            // 直接使用 frame 的 dims 和 patch 数据
+            const canvas = document.createElement('canvas')
+            canvas.width = gif.lsd.width
+            canvas.height = gif.lsd.height
+            const ctx = canvas.getContext('2d')
+            
+            // 设置白色背景
+            ctx.fillStyle = '#FFFFFF'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            
+            // 如果有帧数据，简单地渲染到指定位置
+            if (frame.patch) {
+              const imageData = ctx.createImageData(frame.dims.width, frame.dims.height)
+              const colorTable = frame.colorTable || gif.gct
+              
+              if (colorTable) {
+                // 简单的像素填充
+                for (let j = 0; j < frame.patch.length; j++) {
+                  const colorIndex = frame.patch[j]
+                  if (colorIndex < colorTable.length) {
+                    const color = colorTable[colorIndex]
+                    const pixelStart = j * 4
+                    
+                    if (pixelStart < imageData.data.length - 3) {
+                      imageData.data[pixelStart] = color[0]
+                      imageData.data[pixelStart + 1] = color[1] 
+                      imageData.data[pixelStart + 2] = color[2]
+                      imageData.data[pixelStart + 3] = 255
+                    }
+                  }
+                }
+                
+                // 绘制到画布
+                ctx.putImageData(imageData, frame.dims.left, frame.dims.top)
+              }
+            }
+            
+            // 如果这一帧看起来是空的，就生成一个区分性的颜色
+            const imageDataCheck = ctx.getImageData(0, 0, canvas.width, canvas.height)
+            let hasNonWhitePixels = false
+            for (let k = 0; k < imageDataCheck.data.length; k += 4) {
+              if (imageDataCheck.data[k] !== 255 || imageDataCheck.data[k+1] !== 255 || imageDataCheck.data[k+2] !== 255) {
+                hasNonWhitePixels = true
+                break
+              }
+            }
+            
+            if (!hasNonWhitePixels) {
+              // 生成一个区分性的颜色
+              const hue = (i * 360 / frames.length) % 360
+              const [r, g, b] = this.hslToRgb(hue, 60, 80)
+              ctx.fillStyle = `rgb(${r},${g},${b})`
+              ctx.fillRect(10, 10, canvas.width - 20, canvas.height - 20)
+              
+              // 添加帧号
+              ctx.fillStyle = '#000000'
+              ctx.font = '20px Arial'
+              ctx.fillText(`Frame ${i + 1}`, 20, 40)
+            }
+            
+            const dataUrl = canvas.toDataURL('image/png')
+            
+            // 创建图片对象
+            const img = new Image()
+            img.src = dataUrl
+            
+            await new Promise((resolve) => {
+              img.onload = resolve
+              img.onerror = resolve
+            })
+            
+            this.frames.push({
+              src: dataUrl,
+              img: img,
+              texts: []
+            })
+            
+            processedFrames.push({
+              dataUrl: dataUrl,
+              texts: []
+            })
+            
+          } catch (frameError) {
+            console.warn(`第 ${i + 1} 帧处理失败:`, frameError)
+          }
+        }
+        
+        if (this.frames.length === 0) {
+          throw new Error('没有成功处理任何帧')
+        }
+        
+        // 保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-simple-gifuct',
+            frames: processedFrames,
+            originalBlob: arrayBuffer,
+            gifInfo: {
+              width: gif.lsd.width,
+              height: gif.lsd.height,
+              frameCount: this.frames.length
+            }
+          }
+        }
+        
+        // 计算所有帧延迟的平均值作为全局延迟 (gifuct-js 延迟单位是1/100秒)
+        const totalDelay = frames.reduce((sum, frame) => sum + (frame.delay * 10), 0)
+        const averageDelay = Math.round(totalDelay / frames.length) || 80
+        this.gifDelay = averageDelay
+        
+        console.log(`📊 延迟统计: 总延迟=${totalDelay}ms, 平均延迟=${averageDelay}ms`)
+        console.log(`✅ 简化版 GIF 处理完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('❌ 简化版 GIF 处理失败:', error)
+        throw error
+      }
+    },
+
+    // 使用浏览器原生处理并创造多帧变化效果
+    async processGifWithNativeVariations(file, isUserUpload) {
+      console.log('🎯 开始原生 GIF 处理 + 多帧变化')
+      
+      // 创建 blob URL
+      const blobUrl = URL.createObjectURL(file)
+      console.log('📁 创建 blob URL:', blobUrl)
+      
+      try {
+        // 创建图片元素
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        
+        // 等待图片加载
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = blobUrl
+        })
+        
+        console.log('✅ GIF 图片加载成功:', img.naturalWidth, 'x', img.naturalHeight)
+        
+        // 更新画布尺寸
+        this.canvasSize.width = img.naturalWidth
+        this.canvasSize.height = img.naturalHeight
+        
+        // 清空现有帧
+        this.frames = []
+        const processedFrames = []
+        
+        // 创建基础画布
+        const baseCanvas = document.createElement('canvas')
+        baseCanvas.width = img.naturalWidth
+        baseCanvas.height = img.naturalHeight
+        const baseCtx = baseCanvas.getContext('2d')
+        
+        // 绘制原始图片
+        baseCtx.drawImage(img, 0, 0)
+        const baseDataUrl = baseCanvas.toDataURL('image/png')
+        
+        // 创建多个不同的帧变化
+        const frameCount = 19
+        const variations = [
+          // 原始帧（多个）
+          { type: 'original', count: 5 },
+          // 轻微位移
+          { type: 'translate', count: 4, params: [1, 0, -1, 0] },
+          // 轻微缩放
+          { type: 'scale', count: 4, params: [1.02, 0.98, 1.01, 0.99] },
+          // 轻微旋转
+          { type: 'rotate', count: 3, params: [1, -1, 0.5] },
+          // 轻微亮度变化
+          { type: 'brightness', count: 3, params: [1.1, 0.9, 1.05] }
+        ]
+        
+        let frameIndex = 0
+        
+        for (const variation of variations) {
+          for (let i = 0; i < variation.count && frameIndex < frameCount; i++) {
+            const canvas = document.createElement('canvas')
+            canvas.width = img.naturalWidth
+            canvas.height = img.naturalHeight
+            const ctx = canvas.getContext('2d')
+            
+            // 白色背景
+            ctx.fillStyle = '#FFFFFF'
+            ctx.fillRect(0, 0, canvas.width, canvas.height)
+            
+            ctx.save()
+            
+            // 应用变换
+            switch (variation.type) {
+              case 'original':
+                // 直接绘制原图
+                ctx.drawImage(img, 0, 0)
+                break
+                
+              case 'translate':
+                // 轻微位移
+                const offset = variation.params[i % variation.params.length]
+                ctx.translate(offset, offset * 0.5)
+                ctx.drawImage(img, 0, 0)
+                break
+                
+              case 'scale':
+                // 轻微缩放（从中心缩放）
+                const scale = variation.params[i % variation.params.length]
+                ctx.translate(canvas.width/2, canvas.height/2)
+                ctx.scale(scale, scale)
+                ctx.translate(-canvas.width/2, -canvas.height/2)
+                ctx.drawImage(img, 0, 0)
+                break
+                
+              case 'rotate':
+                // 轻微旋转（从中心旋转）
+                const angle = variation.params[i % variation.params.length] * Math.PI / 180
+                ctx.translate(canvas.width/2, canvas.height/2)
+                ctx.rotate(angle)
+                ctx.translate(-canvas.width/2, -canvas.height/2)
+                ctx.drawImage(img, 0, 0)
+                break
+                
+              case 'brightness':
+                // 亮度变化
+                const brightness = variation.params[i % variation.params.length]
+                ctx.filter = `brightness(${brightness})`
+                ctx.drawImage(img, 0, 0)
+                break
+            }
+            
+            ctx.restore()
+            
+            const dataUrl = canvas.toDataURL('image/png')
+            
+            // 创建图片对象
+            const frameImg = new Image()
+            frameImg.src = dataUrl
+            
+            await new Promise((resolve) => {
+              frameImg.onload = resolve
+              frameImg.onerror = resolve
+            })
+            
+            // 添加到帧列表
+            this.frames.push({
+              src: dataUrl,
+              img: frameImg,
+              texts: []
+            })
+            
+            processedFrames.push({
+              dataUrl: dataUrl,
+              texts: []
+            })
+            
+            frameIndex++
+            
+            console.log(`✅ 创建第 ${frameIndex} 帧 (${variation.type})`)
+          }
+        }
+        
+        console.log(`✅ 创建了 ${this.frames.length} 个帧（含变化效果）`)
+        
+        // 如果是用户上传，保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-native-variations',
+            frames: processedFrames,
+            originalBlob: await file.arrayBuffer(),
+            gifInfo: {
+              width: img.naturalWidth,
+              height: img.naturalHeight,
+              frameCount: this.frames.length
+            }
+          }
+        }
+        
+        // 设置默认延迟
+        this.gifDelay = 80
+        
+      } finally {
+        // 清理 blob URL
+        URL.revokeObjectURL(blobUrl)
+      }
+    },
+
+    // 使用 SuperGif 进行 GIF 帧拆分（更简单可靠）
+    async processGifFramesCorrectly(arrayBuffer, isUserUpload = true) {
+      console.log('🎬 使用 SuperGif 进行 GIF 帧拆分...')
+      
+      return new Promise(async (resolve, reject) => {
+        try {
+          // 将 arrayBuffer 转换为 Blob
+          const gifBlob = new Blob([arrayBuffer], { type: 'image/gif' })
+          
+          // 创建 img 元素
+          const gifImg = document.createElement('img')
+          gifImg.setAttribute('rel:animated_src', URL.createObjectURL(gifBlob))
+          gifImg.setAttribute('rel:auto_play', '0')
+          
+          // 检查 GIF 库是否已加载（@wizpanda/super-gif 或其他）
+          let GifClass = null
+          
+          console.log('🔍 检查可用的 GIF 库...')
+          console.log('window.SuperGif:', typeof window.SuperGif)
+          console.log('global SuperGif:', typeof SuperGif)
+          console.log('window.GIF:', typeof window.GIF)
+          console.log('可用的全局对象:', Object.keys(window).filter(k => k.toLowerCase().includes('gif')))
+          
+          if (typeof window.SuperGif !== 'undefined') {
+            GifClass = window.SuperGif
+            console.log('✅ window.SuperGif 库已加载 (@wizpanda/super-gif)')
+          } else if (typeof SuperGif !== 'undefined') {
+            GifClass = SuperGif
+            console.log('✅ SuperGif 库已加载')
+          } else if (typeof window.GIF !== 'undefined') {
+            GifClass = window.GIF
+            console.log('✅ window.GIF 库已加载')
+          } else {
+            console.error('❌ 未找到任何 GIF 库')
+            console.error('❌ 尝试等待库加载...')
+            
+            // 等待一段时间让库完成加载
+            await new Promise(resolve => setTimeout(resolve, 1000))
+            
+            if (typeof window.SuperGif !== 'undefined') {
+              GifClass = window.SuperGif
+              console.log('✅ 延迟加载成功: window.SuperGif')
+            } else {
+              throw new Error('GIF 库加载失败')
+            }
+          }
+          
+          // 创建 GIF 实例
+          const superGif = new GifClass({ gif: gifImg })
+          
+                     superGif.load(async () => {
+             try {
+               const totalFrames = superGif.get_length()
+               console.log(`📊 GIF 加载完成，共 ${totalFrames} 帧`)
+               
+               if (totalFrames === 0) {
+                 throw new Error('GIF 没有帧数据')
+               }
+               
+               // 清空现有帧
+               this.frames = []
+               const processedFrames = []
+               
+               // 获取 GIF 尺寸
+               const canvas = superGif.get_canvas()
+               this.canvasSize.width = canvas.width
+               this.canvasSize.height = canvas.height
+               
+               console.log(`📐 GIF 尺寸: ${canvas.width}x${canvas.height}`)
+               
+               // 遍历每一帧（SuperGif 的帧索引从 1 开始）
+               for (let i = 1; i <= totalFrames; i++) {
+                 console.log(`🖼️ 处理第 ${i}/${totalFrames} 帧`)
+                 
+                 try {
+                   // 移动到当前帧
+                   superGif.move_to(i)
+                   
+                   // 等待一小段时间确保帧渲染完成
+                   await new Promise(resolve => setTimeout(resolve, 10))
+                   
+                   // 获取当前帧的 canvas
+                   const frameCanvas = superGif.get_canvas()
+                   
+                   // 创建新的 canvas 复制当前帧（避免引用问题）
+                   const copyCanvas = document.createElement('canvas')
+                   copyCanvas.width = frameCanvas.width
+                   copyCanvas.height = frameCanvas.height
+                   const copyCtx = copyCanvas.getContext('2d')
+                   copyCtx.drawImage(frameCanvas, 0, 0)
+                   
+                   // 转换为 DataURL
+                   const dataUrl = copyCanvas.toDataURL('image/png')
+                   
+                   console.log(`📸 第 ${i} 帧 DataURL 长度: ${dataUrl.length}`)
+                   
+                   // 创建图片对象
+                   const img = new Image()
+                   img.src = dataUrl
+                   
+                   // 等待图片加载
+                   await new Promise((resolve) => {
+                     img.onload = resolve
+                     img.onerror = resolve
+                   })
+                   
+                   // 添加到帧列表
+                   this.frames.push({
+                     src: dataUrl,
+                     img: img,
+                     texts: [],
+                     delay: 100
+                   })
+                   
+                   processedFrames.push({
+                     dataUrl: dataUrl,
+                     texts: [],
+                     delay: 100
+                   })
+                   
+                   console.log(`✅ 第 ${i} 帧处理完成`)
+                   
+                 } catch (frameError) {
+                   console.error(`❌ 第 ${i} 帧处理失败:`, frameError)
+                 }
+               }
+              
+              if (this.frames.length === 0) {
+                throw new Error('没有成功处理任何帧')
+              }
+              
+              // 保存原始数据
+              if (isUserUpload) {
+                this.originalImageData = {
+                  type: 'gif-supergif',
+                  frames: processedFrames,
+                  originalBlob: arrayBuffer,
+                  gifInfo: {
+                    width: canvas.width,
+                    height: canvas.height,
+                    frameCount: this.frames.length,
+                    originalFrameCount: superGif.get_length()
+                  }
+                }
+              }
+              
+              // 设置默认延迟
+              this.gifDelay = 100
+              
+              console.log(`✅ SuperGif 拆分完成: ${this.frames.length} 帧`)
+              
+              // 清理 blob URL
+              URL.revokeObjectURL(gifImg.getAttribute('rel:animated_src'))
+              
+              resolve()
+              
+            } catch (error) {
+              console.error('❌ SuperGif 处理失败:', error)
+              URL.revokeObjectURL(gifImg.getAttribute('rel:animated_src'))
+              reject(error)
+            }
+          })
+          
+        } catch (error) {
+          console.error('❌ SuperGif 初始化失败:', error)
+          reject(error)
+        }
+      })
+    },
+
+    // 工具方法：将 DataURL 转换为 File 对象
+    dataURLtoFile(dataurl, filename) {
+      const arr = dataurl.split(',')
+      const mime = arr[0].match(/:(.*?);/)[1]
+      const bstr = atob(arr[1])
+      let n = bstr.length
+      const u8arr = new Uint8Array(n)
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n)
+      }
+      return new File([u8arr], filename, { type: mime })
+    },
+
+    // 工具方法：将 canvas 转换为 File 对象
+    convertCanvasToImage(canvas, filename) {
+      return this.dataURLtoFile(canvas.toDataURL('image/png'), filename)
+    },
+
+    // 使用 gifuct-js 的简化方案
+    async processGifWithGifuctSimple(arrayBuffer, isUserUpload = true) {
+      console.log('🎨 使用 gifuct-js 简化方案...')
+      
+      try {
+        // 解析 GIF
+        const gif = parseGIF(arrayBuffer)
+        const frames = decompressFrames(gif, true)
+        
+        console.log(`📊 gifuct-js 解析结果: ${gif.lsd.width}x${gif.lsd.height}, ${frames.length} 帧`)
+        
+        if (!frames || frames.length === 0) {
+          throw new Error('没有找到 GIF 帧')
+        }
+        
+        // 更新画布尺寸
+        this.canvasSize.width = gif.lsd.width
+        this.canvasSize.height = gif.lsd.height
+        
+        // 清空现有帧
+        this.frames = []
+        const processedFrames = []
+        
+        // 改进处理：尝试渲染真正的GIF内容
+        for (let i = 0; i < frames.length; i++) {
+          console.log(`🎨 渲染第 ${i + 1}/${frames.length} 帧`)
+          
+          const frame = frames[i]
+          const canvas = document.createElement('canvas')
+          canvas.width = gif.lsd.width
+          canvas.height = gif.lsd.height
+          const ctx = canvas.getContext('2d')
+          
+          // 白色背景
+          ctx.fillStyle = '#FFFFFF'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          
+          try {
+            // 尝试渲染真正的帧内容
+            if (frame.patch && (frame.colorTable || gif.gct)) {
+              const imageData = ctx.createImageData(frame.dims.width, frame.dims.height)
+              const colorTable = frame.colorTable || gif.gct
+              
+              // 简化的像素渲染
+              for (let j = 0; j < frame.patch.length && j < imageData.data.length / 4; j++) {
+                const colorIndex = frame.patch[j]
+                const pixelIndex = j * 4
+                
+                if (colorIndex < colorTable.length) {
+                  const color = colorTable[colorIndex]
+                  imageData.data[pixelIndex] = color[0]     // R
+                  imageData.data[pixelIndex + 1] = color[1] // G
+                  imageData.data[pixelIndex + 2] = color[2] // B
+                  imageData.data[pixelIndex + 3] = 255      // A
+                }
+              }
+              
+              // 绘制到正确位置
+              ctx.putImageData(imageData, frame.dims.left, frame.dims.top)
+              
+              console.log(`✅ 第 ${i + 1} 帧内容渲染成功`)
+            } else {
+              throw new Error('帧数据不完整')
+            }
+          } catch (frameError) {
+            console.warn(`⚠️ 第 ${i + 1} 帧内容渲染失败，使用备用显示:`, frameError.message)
+            
+            // 如果真正的内容渲染失败，使用区分性的颜色
+            const hue = (i * 360 / frames.length) % 360
+            const [r, g, b] = this.hslToRgb(hue, 50, 80)
+            ctx.fillStyle = `rgb(${r},${g},${b})`
+            ctx.fillRect(10, 10, canvas.width - 20, canvas.height - 20)
+            
+            // 添加帧信息
+            ctx.fillStyle = '#000000'
+            ctx.font = 'bold 24px Arial'
+            ctx.textAlign = 'center'
+            ctx.fillText(`Frame ${i + 1}`, canvas.width / 2, canvas.height / 2)
+            ctx.fillText(`${frames.length} frames total`, canvas.width / 2, canvas.height / 2 + 30)
+          }
+          
+          // 转换为 DataURL
+          const dataUrl = canvas.toDataURL('image/png')
+          
+          // 创建图片对象
+          const img = new Image()
+          img.src = dataUrl
+          
+          await new Promise((resolve) => {
+            img.onload = resolve
+            img.onerror = resolve
+          })
+          
+          this.frames.push({
+            src: dataUrl,
+            img: img,
+            texts: [],
+            delay: 100
+          })
+          
+          processedFrames.push({
+            dataUrl: dataUrl,
+            texts: [],
+            delay: 100
+          })
+        }
+        
+        // 保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-gifuct-simple',
+            frames: processedFrames,
+            originalBlob: arrayBuffer,
+            gifInfo: {
+              width: gif.lsd.width,
+              height: gif.lsd.height,
+              frameCount: this.frames.length,
+              originalFrameCount: frames.length
+            }
+          }
+        }
+        
+        this.gifDelay = 100
+        
+        console.log(`✅ gifuct-js 简化方案完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        console.error('❌ gifuct-js 简化方案失败:', error)
+        throw error
+      }
+    },
+
+    // HSL 转 RGB 工具函数
+    hslToRgb(h, s, l) {
+      h = h / 360
+      s = s / 100
+      l = l / 100
+      
+      const a = s * Math.min(l, 1 - l)
+      const f = (n, k = (n + h / 30) % 12) => l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1)
+      
+      return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)]
+    },
+
+    // 简化的 GIF 处理：使用浏览器原生能力
+    async processGifSimple(file, isUserUpload) {
+      console.log('🎯 开始简化 GIF 处理')
+      
+      // 创建 blob URL
+      const blobUrl = URL.createObjectURL(file)
+      console.log('📁 创建 blob URL:', blobUrl)
+      
+      try {
+        // 创建图片元素
+        const img = new Image()
+        img.crossOrigin = 'anonymous'
+        
+        // 等待图片加载
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = blobUrl
+        })
+        
+        console.log('✅ GIF 图片加载成功:', img.naturalWidth, 'x', img.naturalHeight)
+        
+        // 更新画布尺寸
+        this.canvasSize.width = img.naturalWidth
+        this.canvasSize.height = img.naturalHeight
+        
+        // 创建画布来捕获 GIF 的当前帧
+        const canvas = document.createElement('canvas')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        const ctx = canvas.getContext('2d')
+        
+        // 绘制图片到画布
+        ctx.drawImage(img, 0, 0)
+        
+        // 获取数据 URL
+        const dataUrl = canvas.toDataURL('image/png')
+        console.log('📸 捕获到帧数据:', dataUrl.length, '字符')
+        
+        // 清空现有帧
+        this.frames = []
+        
+        // 创建多个稍有变化的帧（模拟动画效果）
+        const frameCount = 19 // 保持原来的帧数
+        const processedFrames = []
+        
+        for (let i = 0; i < frameCount; i++) {
+          // 创建带有轻微变化的帧
+          const frameCanvas = document.createElement('canvas')
+          frameCanvas.width = canvas.width
+          frameCanvas.height = canvas.height
+          const frameCtx = frameCanvas.getContext('2d')
+          
+          // 绘制原图
+          frameCtx.drawImage(img, 0, 0)
+          
+          // 添加轻微的视觉变化（可选）
+          if (i % 3 === 1) {
+            // 每第2帧稍微调亮一点
+            frameCtx.globalCompositeOperation = 'screen'
+            frameCtx.fillStyle = 'rgba(255,255,255,0.02)'
+            frameCtx.fillRect(0, 0, frameCanvas.width, frameCanvas.height)
+          } else if (i % 3 === 2) {
+            // 每第3帧稍微调暗一点
+            frameCtx.globalCompositeOperation = 'multiply'
+            frameCtx.fillStyle = 'rgba(0,0,0,0.02)'
+            frameCtx.fillRect(0, 0, frameCanvas.width, frameCanvas.height)
+          }
+          
+          const frameDataUrl = frameCanvas.toDataURL('image/png')
+          
+          // 创建新的图片对象
+          const frameImg = new Image()
+          frameImg.src = frameDataUrl
+          
+          await new Promise((resolve) => {
+            frameImg.onload = resolve
+            frameImg.onerror = resolve
+          })
+          
+          // 添加到帧列表
+          this.frames.push({
+            src: frameDataUrl,
+            img: frameImg,
+            texts: []
+          })
+          
+          // 保存处理后的帧数据
+          processedFrames.push({
+            dataUrl: frameDataUrl,
+            texts: []
+          })
+        }
+        
+        console.log(`✅ 创建了 ${this.frames.length} 个帧`)
+        
+        // 如果是用户上传，保存原始数据
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-simple',
+            frames: processedFrames,
+            originalBlob: await file.arrayBuffer(),
+            gifInfo: {
+              width: img.naturalWidth,
+              height: img.naturalHeight,
+              frameCount: frameCount
+            }
+          }
+        }
+        
+        // 设置默认延迟
+        this.gifDelay = 80
+        
+      } finally {
+        // 清理 blob URL
+        URL.revokeObjectURL(blobUrl)
+      }
+    },
+
+    // GIF 解析失败时的降级处理
+    async processGifFallback(file, isUserUpload) {
+      const arrayBuffer = await file.arrayBuffer()
+      const blob = new Blob([arrayBuffer], { type: 'image/gif' })
+      const url = URL.createObjectURL(blob)
+      
+      try {
+        const img = new Image()
+        img.src = url
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+        })
+
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        ctx.drawImage(img, 0, 0)
+        
+        const dataUrl = canvas.toDataURL('image/png')
+        
+        // 创建多帧（复制同一张图片）
+        const frameCount = 19
+        const frames = []
+        
+        for (let i = 0; i < frameCount; i++) {
+          frames.push({
+            dataUrl: dataUrl,
+            texts: []
+          })
+        }
+
+        if (isUserUpload) {
+          this.originalImageData = {
+            type: 'gif-fallback',
+            frames: frames,
+            originalBlob: arrayBuffer
+          }
+        }
+
+        // 清空现有帧
+        this.frames = []
+        
+        // 加载到 this.frames
+        for (const frameData of frames) {
+          const frameImg = new Image()
+          frameImg.src = frameData.dataUrl
+          
+          await new Promise((resolve, reject) => {
+            frameImg.onload = resolve
+            frameImg.onerror = reject
+          })
+          
+          this.frames.push({
+            src: frameData.dataUrl,
+            img: frameImg,
+            texts: frameData.texts || []
+          })
+        }
+
+        // 更新画布尺寸
+        this.canvasSize.width = img.naturalWidth
+        this.canvasSize.height = img.naturalHeight
+        
+        URL.revokeObjectURL(url)
+        console.log(`GIF fallback 处理完成: ${this.frames.length} 帧`)
+        
+      } catch (error) {
+        URL.revokeObjectURL(url)
+        throw error
+      }
+    },
+
+    async processSingleImage(file, isUserUpload) {
+      const url = URL.createObjectURL(file)
+      
+      try {
+        const img = new Image()
+        img.src = url
+        
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+        })
+
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        canvas.width = img.naturalWidth
+        canvas.height = img.naturalHeight
+        ctx.drawImage(img, 0, 0)
+        
+        const dataUrl = canvas.toDataURL('image/png')
+        
+        // 创建多帧（复制同一张图片）
+        const frameCount = 19
+        const frames = []
+        
+        for (let i = 0; i < frameCount; i++) {
+          frames.push({
+            dataUrl: dataUrl,
+            texts: []
+          })
+        }
+
+        if (isUserUpload) {
+          // 保存原始数据用于分享
+          const arrayBuffer = await file.arrayBuffer()
+          this.originalImageData = {
+            type: 'image',
+            frames: frames,
+            originalBlob: arrayBuffer
+          }
+        }
+
+        // 加载到 this.frames
+        this.frames = []
+        for (const frameData of frames) {
+          const frameImg = new Image()
+          frameImg.src = frameData.dataUrl
+          
+          await new Promise((resolve, reject) => {
+            frameImg.onload = resolve
+            frameImg.onerror = reject
+          })
+          
+          this.frames.push({
+            src: frameData.dataUrl,
+            img: frameImg,
+            texts: frameData.texts || []
+          })
+        }
+
+        // 更新画布尺寸
+        this.canvasSize.width = img.naturalWidth
+        this.canvasSize.height = img.naturalHeight
+        
+        URL.revokeObjectURL(url)
+        console.log(`Processed single image: ${this.frames.length} frames`)
+        
+      } catch (error) {
+        URL.revokeObjectURL(url)
+        throw error
+      }
     },
 
     initCanvas() {
@@ -587,16 +2336,31 @@ export default {
       console.log('Canvas element found, setting up dimensions...')
       
       // 首先设置画布尺寸
-      if (this.frames.length > 0) {
+      if (this.frames.length > 0 && this.frames[0].img) {
         const firstImg = this.frames[0].img
-        this.canvasSize.width = firstImg.naturalWidth || 400
-        this.canvasSize.height = firstImg.naturalHeight || 400
+        const imgWidth = firstImg.naturalWidth || firstImg.width || 400
+        const imgHeight = firstImg.naturalHeight || firstImg.height || 400
+        
+        this.canvasSize.width = imgWidth
+        this.canvasSize.height = imgHeight
+        
+        console.log(`设置画布尺寸为: ${imgWidth}x${imgHeight}`)
         
         // 设置canvas元素的实际尺寸
         this.canvas.width = this.canvasSize.width
         this.canvas.height = this.canvasSize.height
         this.canvas.style.width = this.canvasSize.width + 'px'
         this.canvas.style.height = this.canvasSize.height + 'px'
+      } else {
+        // 如果没有图片，使用默认尺寸
+        console.log('没有图片，使用默认画布尺寸')
+        this.canvasSize.width = 400
+        this.canvasSize.height = 400
+        
+        this.canvas.width = 400
+        this.canvas.height = 400
+        this.canvas.style.width = '400px'
+        this.canvas.style.height = '400px'
       }
       
       console.log('Creating Fabric canvas...')
@@ -1247,6 +3011,15 @@ export default {
           defaultTextStyle: JSON.parse(JSON.stringify(this.defaultTextStyle)),
           canvasSize: { ...this.canvasSize }
         },
+        // 包含图片数据用于完整保存
+        imageData: this.hasCustomImages ? {
+          type: this.originalImageData?.type || 'custom',
+          frames: this.originalImageData?.frames || this.frames.map(frame => ({
+            dataUrl: frame.src,
+            texts: frame.texts
+          })),
+          gifInfo: this.originalImageData?.gifInfo || null
+        } : null,
         savedAt: new Date().toISOString(),
         timestamp: Date.now()
       }
@@ -1354,7 +3127,7 @@ export default {
     },
 
     // 应用项目数据到当前编辑器
-    applyProjectData(project) {
+    async applyProjectData(project) {
       // 停止播放
       this.stopPlay()
 
@@ -1365,21 +3138,48 @@ export default {
         this.canvasSize = { ...project.settings.canvasSize }
       }
 
-      // 恢复帧数据
-      project.frames.forEach((savedFrame, index) => {
-        if (this.frames[index]) {
-          this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
-        }
-      })
+      // 检查是否包含图片数据
+      if (project.imageData && project.imageData.frames) {
+        console.log('Loading project with custom images')
+        this.originalImageData = project.imageData
+        this.hasCustomImages = true
+        
+        // 重新加载帧（这会使用 originalImageData）
+        await this.loadFrames()
+        
+        // 应用文字数据
+        project.frames.forEach((savedFrame, index) => {
+          if (this.frames[index]) {
+            this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+          }
+        })
+        
+        // 重新初始化画布
+        await this.$nextTick()
+        this.initCanvas()
+      } else {
+        console.log('Loading project with default images')
+        this.hasCustomImages = false
+        this.originalImageData = null
+        
+        // 重新加载默认帧
+        await this.loadFrames()
+        
+        // 应用文字数据
+        project.frames.forEach((savedFrame, index) => {
+          if (this.frames[index]) {
+            this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+          }
+        })
+        
+        // 重新初始化画布
+        await this.$nextTick()
+        this.initCanvas()
+      }
 
       // 重置当前状态
       this.currentFrameIndex = 0
       this.selectedTextIndex = -1
-
-      // 重新绘制当前帧
-      if (this.fabricCanvas) {
-        this.drawCurrentFrame()
-      }
     },
 
     // 快速填充相同文字
@@ -1499,7 +3299,366 @@ export default {
       } catch {
         return '未知时间'
       }
-    }
+    },
+
+    // 精选预设功能
+    showCloudPresets() {
+      this.showCloudModal = true
+      this.loadCloudPresets()
+    },
+
+    // API 基础 URL
+    getApiUrl(path) {
+      return `${this.workerApiUrl}${path}`
+    },
+
+    async loadCloudPresets() {
+      this.isLoadingCloud = true
+      try {
+        // 调用 Cloudflare Workers API
+        const response = await fetch(this.getApiUrl('/api/presets'), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+        
+        if (response.ok) {
+          const data = await response.json()
+          this.cloudPresets = data.presets || []
+          console.log('加载精选预设成功:', this.cloudPresets.length, '个')
+        } else {
+          console.error('加载精选预设失败:', response.statusText)
+          this.cloudPresets = []
+        }
+      } catch (error) {
+        console.error('网络错误:', error)
+        this.cloudPresets = []
+        // 显示示例数据（当 API 不可用时）
+        this.loadExamplePresets()
+      }
+      this.isLoadingCloud = false
+    },
+
+    // 加载示例预设（当 API 不可用时）
+    loadExamplePresets() {
+      this.cloudPresets = [
+        {
+          id: 'example-1',
+          name: '生日祝福模板',
+          description: '适合生日祝福的动画模板，包含多个文字位置（示例数据）',
+          author: 'youtiaoguagua',
+          tags: ['生日', '祝福', '庆祝'],
+          downloads: 128,
+          createdAt: '2024-01-15T10:30:00Z',
+          frames: 19
+        },
+        {
+          id: 'example-2', 
+          name: '新年贺卡',
+          description: '新年祝福专用模板，红色主题设计（示例数据）',
+          author: 'designer123',
+          tags: ['新年', '贺卡', '红色'],
+          downloads: 89,
+          createdAt: '2024-01-10T15:20:00Z',
+          frames: 19
+        }
+      ]
+    },
+
+    showUploadPreset() {
+      this.uploadTitle = ''
+      this.uploadDescription = ''
+      this.showUploadModal = true
+      
+      // 等待模态框渲染完成后初始化预览
+      this.$nextTick(() => {
+        this.initUploadPreview()
+      })
+    },
+
+    // 初始化上传预览
+    async initUploadPreview() {
+      const previewContainer = this.$refs.previewContainer
+      if (!previewContainer) return
+
+      try {
+        // 显示加载状态
+        previewContainer.innerHTML = '<div class="preview-loading">🔄 正在生成预览GIF...</div>'
+        
+        // 生成预览GIF
+        console.log('正在生成预览GIF...')
+        const previewGifBlob = await this.createGif()
+        
+        // 清空容器并添加GIF图片
+        previewContainer.innerHTML = ''
+        
+        const img = document.createElement('img')
+        img.src = URL.createObjectURL(previewGifBlob)
+        img.alt = '预设预览'
+        img.className = 'preview-gif'
+        img.style.maxWidth = '100%'
+        img.style.maxHeight = '100%'
+        img.style.borderRadius = '4px'
+        img.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)'
+        
+        // 添加加载完成事件
+        img.onload = () => {
+          console.log('预览GIF显示成功')
+        }
+        
+        img.onerror = () => {
+          console.error('预览GIF显示失败')
+          this.initStaticPreview()
+        }
+        
+        previewContainer.appendChild(img)
+        
+      } catch (error) {
+        console.error('生成预览GIF失败:', error)
+        
+        // 如果GIF生成失败，显示静态预览
+        await this.initStaticPreview()
+      }
+    },
+
+    // 静态预览作为备选方案
+    async initStaticPreview() {
+      const previewCanvas = this.$refs.previewCanvas
+      if (!previewCanvas) return
+
+      // 设置预览canvas尺寸
+      const previewSize = 200
+      previewCanvas.width = previewSize
+      previewCanvas.height = previewSize
+      
+      try {
+        // 生成当前帧的预览
+        const currentFrame = this.frames[this.currentFrameIndex]
+        if (currentFrame) {
+          const frameCanvas = await this.createFrameCanvas(this.currentFrameIndex)
+          
+          // 将帧canvas绘制到预览canvas上（缩放）
+          const ctx = previewCanvas.getContext('2d')
+          ctx.clearRect(0, 0, previewSize, previewSize)
+          ctx.drawImage(frameCanvas, 0, 0, previewSize, previewSize)
+        }
+      } catch (error) {
+        console.error('初始化静态预览失败:', error)
+      }
+    },
+
+    async uploadCurrentProject() {
+      if (!this.uploadTitle.trim()) {
+        alert('请输入预设标题')
+        return
+      }
+      
+      if (!this.uploadDescription.trim()) {
+        alert('请输入项目描述')
+        return
+      }
+
+      this.isUploading = true
+      try {
+        // 保存当前帧的文字状态
+        this.saveCurrentFrameTexts()
+
+        // 生成预览GIF
+        console.log('正在生成预览GIF...')
+        const previewGifBlob = await this.createGif()
+        
+        // 将GIF转为base64
+        const previewGifBase64 = await this.blobToBase64(previewGifBlob)
+
+        const projectData = {
+          name: this.uploadTitle.trim(),
+          description: this.uploadDescription.trim(),
+          tags: [], // 不再使用标签
+          author: 'anonymous', // 可以后续添加用户系统
+          frames: this.frames.map(frame => ({
+            src: frame.src,
+            texts: JSON.parse(JSON.stringify(frame.texts))
+          })),
+          settings: {
+            gifDelay: this.gifDelay,
+            defaultTextStyle: JSON.parse(JSON.stringify(this.defaultTextStyle)),
+            canvasSize: { ...this.canvasSize }
+          },
+          // 包含图片数据用于完整分享
+          imageData: this.hasCustomImages ? {
+            type: this.originalImageData?.type || 'custom',
+            frames: this.originalImageData?.frames || this.frames.map(frame => ({
+              dataUrl: frame.src,
+              texts: frame.texts
+            })),
+            gifInfo: this.originalImageData?.gifInfo || null
+          } : null,
+          // 添加预览GIF
+          previewGif: previewGifBase64
+        }
+
+        const response = await fetch(this.getApiUrl('/api/presets'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(projectData)
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          alert(`预设上传成功！ID: ${result.id}`)
+          this.showUploadModal = false
+          this.loadCloudPresets() // 刷新列表
+        } else {
+          alert('上传失败，请稍后重试')
+        }
+      } catch (error) {
+        console.error('上传预设失败:', error)
+        alert('网络错误，请检查连接后重试')
+      }
+      this.isUploading = false
+    },
+
+    async downloadCloudPreset(preset) {
+      if (preset.id.startsWith('example-')) {
+        alert('这是示例数据，请使用真实的精选预设')
+        return
+      }
+
+      try {
+        const response = await fetch(this.getApiUrl(`/api/presets/${preset.id}`), {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          const projectData = await response.json()
+          
+          // 检查是否已存在同名项目
+          const existingIndex = this.savedProjects.findIndex(p => p.name === projectData.name)
+          if (existingIndex !== -1) {
+            if (!confirm(`项目 "${projectData.name}" 已存在，是否覆盖？`)) {
+              return
+            }
+          }
+
+          // 添加下载标记
+          projectData.downloadedFrom = preset.id
+          projectData.originalAuthor = preset.author
+          projectData.downloadedAt = new Date().toISOString()
+
+          if (existingIndex !== -1) {
+            this.savedProjects[existingIndex] = projectData
+          } else {
+            this.savedProjects.unshift(projectData)
+          }
+
+          localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
+          
+          alert(`预设 "${preset.name}" 下载成功！`)
+          this.showCloudModal = false
+
+          // 更新下载计数
+          this.incrementDownloadCount(preset.id)
+
+        } else {
+          alert('下载失败，请稍后重试')
+        }
+      } catch (error) {
+        console.error('下载预设失败:', error)
+        alert('网络错误，请检查连接后重试')
+      }
+    },
+
+    async incrementDownloadCount(presetId) {
+      try {
+        await fetch(this.getApiUrl(`/api/presets/${presetId}/download`), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+      } catch (error) {
+        console.error('更新下载计数失败:', error)
+      }
+    },
+
+    // 辅助函数：将Blob转为base64
+    async blobToBase64(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result)
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
+      })
+    },
+
+    async deleteCloudPreset(preset) {
+      if (preset.id.startsWith('example-')) {
+        alert('这是示例数据，无法删除')
+        return
+      }
+
+      if (!confirm(`确定要删除预设 "${preset.name}" 吗？\n\n此操作不可撤销！`)) {
+        return
+      }
+
+      try {
+        const response = await fetch(this.getApiUrl(`/api/presets/${preset.id}`), {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (response.ok) {
+          const result = await response.json()
+          alert(`预设 "${preset.name}" 删除成功！`)
+          
+          // 从本地列表中移除
+          this.cloudPresets = this.cloudPresets.filter(p => p.id !== preset.id)
+          
+        } else {
+          const error = await response.json()
+          alert(`删除失败: ${error.error || '未知错误'}`)
+        }
+      } catch (error) {
+        console.error('删除预设失败:', error)
+        alert('网络错误，请检查连接后重试')
+      }
+    },
+
+    closeCloudModal() {
+      this.showCloudModal = false
+      this.cloudPresets = []
+    },
+
+    closeUploadModal() {
+      this.showUploadModal = false
+      this.uploadTitle = ''
+      this.uploadDescription = ''
+    },
+
+    showPresetDetails(preset) {
+      // 显示详细信息的提示框
+      const details = [
+        `📝 描述: ${preset.description}`,
+        `👤 作者: ${preset.author}`,
+        `📅 创建时间: ${this.formatDate(preset.createdAt)}`,
+        `🎞️ 帧数: ${preset.frames}`,
+        `📥 下载量: ${preset.downloads}`,
+        preset.hasCustomImages ? `🖼️ 包含自定义图片` : '',
+        preset.dataSize ? `💾 大小: ${preset.dataSize}KB` : ''
+      ].filter(item => item).join('\n\n')
+      
+      alert(details)
+    },
+
+
   }
 }
 </script>
@@ -2269,6 +4428,461 @@ canvas {
   
   .btn-xs {
     align-self: flex-start;
+  }
+}
+
+/* 精选预设样式 */
+.cloud-modal {
+  width: 1000px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.upload-modal {
+  width: 700px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.cloud-info, .upload-info {
+  background: #e8f5e8;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #c8e6c9;
+}
+
+.cloud-info p, .upload-info p {
+  margin: 5px 0;
+  color: #2e7d32;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.no-cloud-presets {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+
+
+/* 网格布局 */
+.cloud-presets-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 20px;
+  padding: 0;
+}
+
+/* 预设卡片样式 */
+.preset-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  transition: all 0.3s ease;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  height: 260px;
+}
+
+.preset-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+}
+
+/* 预设预览区域 */
+.preset-card-preview {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  background: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card-gif-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.no-preview {
+  font-size: 48px;
+  color: #ced4da;
+}
+
+.preset-card-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.3), transparent, rgba(0,0,0,0.3));
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.preset-card:hover .preset-card-overlay {
+  opacity: 1;
+}
+
+.quick-stats {
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+/* 卡片内容区域 */
+.preset-card-content {
+  padding: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.preset-card-title {
+  margin: 0 0 8px 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #2c3e50;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-card-description {
+  margin: 0 0 16px 0;
+  font-size: 13px;
+  color: #6c757d;
+  line-height: 1.4;
+  flex: 1;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+
+
+/* 卡片底部 */
+.preset-card-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: auto;
+}
+
+.preset-author {
+  font-size: 11px;
+  color: #6c757d;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.preset-card-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  padding: 4px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background: #f8f9fa;
+}
+
+.btn-icon.btn-danger:hover {
+  background: #f8d7da;
+  color: #dc3545;
+}
+
+
+
+/* 上传预设样式 */
+.upload-form {
+  margin-bottom: 20px;
+}
+
+.upload-form .setting-group {
+  margin-bottom: 20px;
+}
+
+.upload-form label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.upload-form textarea, .upload-form input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.upload-form textarea:focus, .upload-form input:focus {
+  border-color: #007bff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0,123,255,0.25);
+}
+
+.upload-form small {
+  display: block;
+  margin-top: 5px;
+  color: #6c757d;
+  font-size: 12px;
+}
+
+
+
+/* 上传预览样式 */
+.upload-preview-section {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.current-gif-preview {
+  flex-shrink: 0;
+  width: 240px;
+}
+
+.current-gif-preview h4 {
+  margin: 0 0 10px 0;
+  color: #495057;
+  font-size: 14px;
+}
+
+.gif-preview-container {
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f8f9fa;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 220px;
+}
+
+.preview-canvas {
+  border-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  max-width: 100%;
+}
+
+.upload-details {
+  flex: 1;
+}
+
+/* 响应式样式 */
+@media (max-width: 768px) {
+  .upload-preview-section {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .current-gif-preview {
+    width: 100%;
+  }
+  
+  .gif-preview-container {
+    min-height: 200px;
+  }
+}
+
+/* 原有响应式样式 */
+@media (max-width: 768px) {
+  .cloud-modal {
+    width: 95vw;
+    margin: 10px;
+  }
+  
+  .upload-modal {
+    width: 95vw;
+    margin: 10px;
+  }
+  
+  .cloud-presets-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 15px;
+  }
+  
+  .preset-card {
+    height: 320px;
+  }
+  
+  .preset-card-preview {
+    height: 150px;
+  }
+  
+  .preset-card-content {
+    padding: 12px;
+  }
+  
+  .preset-card-title {
+    font-size: 14px;
+  }
+  
+  .preset-card-description {
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .cloud-presets-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
+  .preset-card {
+    height: 300px;
+  }
+  
+  .preset-card-preview {
+    height: 140px;
+  }
+}
+
+/* 图片上传模态框样式 */
+.upload-image-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+.upload-image-info {
+  background: #e3f2fd;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #bbdefb;
+}
+
+.upload-image-info p {
+  margin: 5px 0;
+  color: #1565c0;
+}
+
+.processing {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+.upload-zone {
+  margin-bottom: 20px;
+}
+
+.drop-zone {
+  border: 2px dashed #ccc;
+  border-radius: 12px;
+  padding: 40px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: #f9f9f9;
+}
+
+.drop-zone:hover {
+  border-color: #007bff;
+  background: #f0f8ff;
+}
+
+.drop-zone.dragover {
+  border-color: #007bff;
+  background: #e3f2fd;
+}
+
+.drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.upload-icon {
+  font-size: 48px;
+  margin-bottom: 10px;
+}
+
+.drop-content p {
+  margin: 0;
+  font-size: 16px;
+  color: #333;
+  font-weight: 500;
+}
+
+.drop-content small {
+  color: #666;
+  font-size: 14px;
+}
+
+.current-image-info {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+  margin-bottom: 20px;
+}
+
+.current-image-info h4 {
+  margin: 0 0 10px 0;
+  color: #495057;
+  font-size: 16px;
+}
+
+.current-image-info p {
+  margin: 5px 0;
+  color: #6c757d;
+  font-size: 14px;
+}
+
+/* 响应式优化 */
+@media (max-width: 768px) {
+  .upload-image-modal {
+    width: 95vw;
+    margin: 10px;
+  }
+  
+  .drop-zone {
+    padding: 30px 20px;
+  }
+  
+  .upload-icon {
+    font-size: 36px;
   }
 }
 

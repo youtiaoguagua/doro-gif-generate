@@ -1,0 +1,33 @@
+{
+  "name": "doro-gif-preset-api",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers API for Doro GIF Editor preset sharing",
+  "main": "cloudflare-worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env development",
+    "kv:create": "wrangler kv:namespace create PRESET_STORE",
+    "kv:create:preview": "wrangler kv:namespace create PRESET_STORE --preview",
+    "kv:list": "wrangler kv:key list --binding=PRESET_STORE",
+    "kv:get-index": "wrangler kv:key get preset-index --binding=PRESET_STORE",
+    "logs": "wrangler tail"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "kv",
+    "gif",
+    "editor",
+    "preset"
+  ],
+  "author": "youtiaoguagua",
+  "license": "MIT",
+  "dependencies": {
+    "gifuct-js": "^2.1.2",
+    "omggif": "^1.0.10"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+} 

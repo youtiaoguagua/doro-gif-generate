@@ -28,3 +28,8 @@ coverage
 *.sw?
 
 *.tsbuildinfo
+
+# Cloudflare Workers
+wrangler.toml
+.wrangler/
+*.log
