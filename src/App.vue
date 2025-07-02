@@ -1027,7 +1027,7 @@ export default {
       originalImageData: null, // 存储原始图片数据用于分享
       defaultImageSrc: '/preset/kick.gif', // 默认图片路径 (public 目录)
       // Cloudflare Worker 配置
-              workerApiUrl: 'https://doro-api.20491504.xyz', // Cloudflare Worker API 域名
+              workerApiUrl: 'https://doro.page.20491504.xyz/api', // Cloudflare Worker API 域名
       defaultTextStyle: {
         text: '新文字',
         fontSize: 24,
@@ -4447,7 +4447,7 @@ export default {
       this.isLoadingCloud = true
       try {
         // 调用 Cloudflare Workers API
-        const response = await fetch(this.getApiUrl('/api/presets'), {
+        const response = await fetch(this.getApiUrl('/presets'), {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
@@ -4633,7 +4633,7 @@ export default {
           previewGif: previewGifBase64
         }
 
-        const response = await fetch(this.getApiUrl('/api/presets'), {
+        const response = await fetch(this.getApiUrl('/presets'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -4663,7 +4663,7 @@ export default {
       }
 
       try {
-        const response = await fetch(this.getApiUrl(`/api/presets/${preset.id}`), {
+        const response = await fetch(this.getApiUrl(`/presets/${preset.id}`), {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json'
@@ -4723,7 +4723,7 @@ export default {
 
     async incrementDownloadCount(presetId) {
       try {
-        await fetch(this.getApiUrl(`/api/presets/${presetId}/download`), {
+        await fetch(this.getApiUrl(`/presets/${presetId}/download`), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -4755,7 +4755,7 @@ export default {
       }
 
       try {
-        const response = await fetch(this.getApiUrl(`/api/presets/${preset.id}`), {
+        const response = await fetch(this.getApiUrl(`/presets/${preset.id}`), {
           method: 'DELETE',
           headers: {
             'Content-Type': 'application/json'
@@ -5941,6 +5941,7 @@ canvas {
   flex: 1;
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
