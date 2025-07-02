@@ -59,18 +59,62 @@
         
         <!-- 帧导航控制 -->
         <div class="frame-controls">
-          <button @click="prevFrame" class="btn btn-outline" :disabled="isPlaying">
-            <span>⏮️</span> 上一帧
-          </button>
-          
-          <div class="frame-info">
-            <span class="current-frame">第 {{ currentFrameIndex + 1 }} 帧 / {{ frames.length }} 帧</span>
-            <span v-if="isPlaying" class="playing-indicator">🔄 播放中</span>
+          <div class="frame-navigation">
+            <button @click="prevFrame" class="btn btn-outline btn-sm" :disabled="isPlaying">
+              <span>⏮️</span> 上一帧
+            </button>
+            
+            <div class="frame-info">
+              <span class="current-frame">第 {{ currentFrameIndex + 1 }} 帧 / {{ frames.length }} 帧</span>
+              <span v-if="isPlaying" class="playing-indicator">🔄 播放中</span>
+            </div>
+            
+            <button @click="nextFrame" class="btn btn-outline btn-sm" :disabled="isPlaying">
+              <span>⏭️</span> 下一帧
+            </button>
           </div>
           
-          <button @click="nextFrame" class="btn btn-outline" :disabled="isPlaying">
-            <span>⏭️</span> 下一帧
-          </button>
+          <div class="play-range-controls">
+            <label class="checkbox-label">
+              <input type="checkbox" v-model="isRangePlay" @change="onRangePlayToggle">
+              <span class="checkmark"></span>
+              范围播放
+            </label>
+            
+            <div v-if="isRangePlay" class="range-inputs">
+              <div class="range-input-item">
+                <label>起始:</label>
+                <input 
+                  type="number" 
+                  v-model.number="playStartFrame" 
+                  @input="validatePlayRange"
+                  :min="0" 
+                  :max="frames.length - 1"
+                  class="frame-input"
+                />
+              </div>
+              
+              <div class="range-input-item">
+                <label>结束:</label>
+                <input 
+                  type="number" 
+                  v-model.number="playEndFrame" 
+                  @input="validatePlayRange"
+                  :min="0" 
+                  :max="frames.length - 1"
+                  class="frame-input"
+                />
+              </div>
+              
+              <button @click="setCurrentAsStart" class="btn btn-outline btn-sm" title="设置当前帧为起始帧">
+                📍起始
+              </button>
+              
+              <button @click="setCurrentAsEnd" class="btn btn-outline btn-sm" title="设置当前帧为结束帧">
+                📍结束
+              </button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -945,6 +989,10 @@ export default {
       // 播放控制
       isPlaying: false,
       playTimer: null,
+      // 播放范围控制
+      playStartFrame: 0,
+      playEndFrame: 0,
+      isRangePlay: false,
       // 应用范围控制
       showApplyModal: false,
       applyStartFrame: 0,
@@ -1034,6 +1082,9 @@ export default {
       
       // 确保所有帧都有drawings数组
       this.ensureFramesHaveDrawings()
+      
+      // 初始化播放范围
+      this.initPlayRange()
       
       await this.$nextTick() // 确保DOM已渲染
       console.log('DOM updated, initializing canvas...')
@@ -1496,6 +1547,9 @@ export default {
         
         console.log(`图片处理完成，共 ${this.frames.length} 帧`)
         
+        // 初始化播放范围
+        this.initPlayRange()
+        
       } catch (error) {
         console.error('Error processing image:', error)
         
@@ -1512,11 +1566,13 @@ export default {
               await this.loadDoroFrames()
               await this.$nextTick()
               this.initCanvas()
+              this.initPlayRange()
             } catch (fallbackError) {
               console.error('回退到默认图片也失败:', fallbackError)
               await this.createEmptyFrames()
               await this.$nextTick()
               this.initCanvas()
+              this.initPlayRange()
             }
           }
         }
@@ -3517,8 +3573,21 @@ export default {
       // 保存当前帧的文字状态
       this.saveCurrentFrameTexts()
       
-      // 切换到下一帧
-      this.currentFrameIndex = (this.currentFrameIndex + 1) % this.frames.length
+      let nextIndex
+      
+      if (this.isRangePlay && this.isPlaying) {
+        // 范围播放模式
+        if (this.currentFrameIndex >= this.playEndFrame) {
+          nextIndex = this.playStartFrame
+        } else {
+          nextIndex = this.currentFrameIndex + 1
+        }
+      } else {
+        // 正常播放模式
+        nextIndex = (this.currentFrameIndex + 1) % this.frames.length
+      }
+      
+      this.currentFrameIndex = nextIndex
       this.selectedTextIndex = -1
       this.selectedStickerIndex = -1
       this.drawCurrentFrame()
@@ -3528,13 +3597,68 @@ export default {
       // 保存当前帧的文字状态
       this.saveCurrentFrameTexts()
       
-      // 切换到上一帧
-      this.currentFrameIndex = this.currentFrameIndex === 0 
-        ? this.frames.length - 1 
-        : this.currentFrameIndex - 1
+      let prevIndex
+      
+      if (this.isRangePlay) {
+        // 范围播放模式下的手动切换
+        if (this.currentFrameIndex <= this.playStartFrame) {
+          prevIndex = this.playEndFrame
+        } else {
+          prevIndex = this.currentFrameIndex - 1
+        }
+      } else {
+        // 正常模式
+        prevIndex = this.currentFrameIndex === 0 
+          ? this.frames.length - 1 
+          : this.currentFrameIndex - 1
+      }
+      
+      this.currentFrameIndex = prevIndex
       this.selectedTextIndex = -1
       this.selectedStickerIndex = -1
       this.drawCurrentFrame()
+    },
+
+    // 范围播放相关方法
+    initPlayRange() {
+      if (this.frames.length > 0) {
+        this.playStartFrame = 0
+        this.playEndFrame = this.frames.length - 1
+      }
+    },
+
+    onRangePlayToggle() {
+      if (this.isRangePlay) {
+        // 启用范围播放时，设置默认范围
+        this.playStartFrame = 0
+        this.playEndFrame = this.frames.length - 1
+        this.validatePlayRange()
+      }
+    },
+
+    validatePlayRange() {
+      // 确保数值是整数
+      this.playStartFrame = Math.floor(Number(this.playStartFrame) || 0)
+      this.playEndFrame = Math.floor(Number(this.playEndFrame) || 0)
+      
+      // 确保范围在有效范围内
+      this.playStartFrame = Math.max(0, Math.min(this.playStartFrame, this.frames.length - 1))
+      this.playEndFrame = Math.max(0, Math.min(this.playEndFrame, this.frames.length - 1))
+      
+      // 确保起始帧不大于结束帧
+      if (this.playStartFrame > this.playEndFrame) {
+        this.playEndFrame = this.playStartFrame
+      }
+    },
+
+    setCurrentAsStart() {
+      this.playStartFrame = this.currentFrameIndex
+      this.validatePlayRange()
+    },
+
+    setCurrentAsEnd() {
+      this.playEndFrame = this.currentFrameIndex
+      this.validatePlayRange()
     },
 
     // 帧顺序变化处理
@@ -4894,13 +5018,19 @@ export default {
 /* 帧控制区域样式 */
 .frame-controls {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 15px;
   margin-top: 15px;
   padding: 15px;
   background: white;
   border-radius: 8px;
   border: 1px solid #e9ecef;
+}
+
+.frame-navigation {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .frame-info {
@@ -4926,6 +5056,109 @@ export default {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+/* 播放范围控制样式 */
+.play-range-controls {
+  border-top: 1px solid #e9ecef;
+  padding-top: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #495057;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.checkbox-label input[type="checkbox"] {
+  display: none;
+}
+
+.checkmark {
+  width: 18px;
+  height: 18px;
+  border: 2px solid #ddd;
+  border-radius: 4px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark {
+  background: #667eea;
+  border-color: #667eea;
+}
+
+.checkbox-label input[type="checkbox"]:checked + .checkmark::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.range-input-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.range-input-item label {
+  font-size: 12px;
+  color: #6c757d;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.frame-input {
+  width: 50px;
+  padding: 4px 6px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 12px;
+  text-align: center;
+}
+
+.frame-input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+  .play-range-controls {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  
+  .range-inputs {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .frame-input {
+    width: 45px;
+  }
 }
 
 .canvas-container {
