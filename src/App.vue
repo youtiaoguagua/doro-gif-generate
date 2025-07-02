@@ -27,9 +27,6 @@
         <div class="editor-header">
           <h3>编辑帧 {{ currentFrameIndex + 1 }} {{ hasCustomImages ? '(自定义图片)' : '(默认图片)' }}</h3>
           <div class="controls">
-            <button @click="showImageUpload" class="btn btn-info">
-              <span>🖼️</span> 上传图片
-            </button>
             <button @click="addText" class="btn btn-primary">
               <span>➕</span> 添加文字
             </button>
@@ -80,6 +77,9 @@
         <div class="project-management">
           <h3>项目管理</h3>
           <div class="project-buttons">
+            <button @click="showImageUpload" class="btn btn-info btn-sm">
+              🖼️ 上传图片
+            </button>
             <button @click="showSaveProjectModal" class="btn btn-primary btn-sm">
               💾 保存项目
             </button>
@@ -301,10 +301,58 @@
         </div>
         <div class="modal-body">
           <div class="apply-info">
-            <p>将当前帧（第 {{ currentFrameIndex + 1 }} 帧）的文字应用到指定范围：</p>
-            <div class="text-preview-list">
-              <div v-for="(text, index) in currentFrame.texts" :key="index" class="text-preview-item">
-                "{{ text.text.slice(0, 20) }}{{ text.text.length > 20 ? '...' : '' }}"
+            <p>将当前帧（第 {{ currentFrameIndex + 1 }} 帧）的内容应用到指定范围：</p>
+            
+            <!-- 调试信息 (开发模式可见) -->
+            <div v-if="false" class="debug-info" style="background: #f0f0f0; padding: 10px; margin: 10px 0; font-size: 12px; border-radius: 4px;">
+              <p>调试信息：</p>
+              <p>文字数量: {{ currentFrame.texts.length }}</p>
+              <p>涂抹数量: {{ currentFrame.drawings ? currentFrame.drawings.length : 'undefined' }}</p>
+              <p>涂抹数据: {{ JSON.stringify(currentFrame.drawings) }}</p>
+            </div>
+            
+            <!-- 应用内容选择 -->
+            <div class="apply-content-selection">
+              <!-- 当前帧没有任何内容时的提示 -->
+              <div v-if="currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0)" class="no-any-content">
+                <p>😅 当前帧暂无文字或涂抹内容</p>
+                <p>你可以先添加一些文字或使用画笔工具涂抹，然后再来应用到其他帧。</p>
+                <div class="debug-actions">
+                  <button @click="forceRefreshDrawings" class="btn btn-outline btn-sm" style="margin-top: 10px;">
+                    🔄 刷新涂抹状态
+                  </button>
+                </div>
+              </div>
+              
+              <!-- 有内容时的选择 -->
+              <div v-else>
+                <div class="content-option">
+                  <label>
+                    <input type="checkbox" v-model="applyTexts" :disabled="currentFrame.texts.length === 0" />
+                    应用文字
+                  </label>
+                  <div v-if="applyTexts && currentFrame.texts.length > 0" class="content-preview">
+                    <div v-for="(text, index) in currentFrame.texts" :key="index" class="text-preview-item">
+                      "{{ text.text.slice(0, 20) }}{{ text.text.length > 20 ? '...' : '' }}"
+                    </div>
+                  </div>
+                  <div v-if="currentFrame.texts.length === 0" class="no-content">
+                    当前帧暂无文字
+                  </div>
+                </div>
+                
+                <div class="content-option">
+                  <label>
+                    <input type="checkbox" v-model="applyDrawings" :disabled="!currentFrame.drawings || currentFrame.drawings.length === 0" />
+                    应用涂抹
+                  </label>
+                  <div v-if="applyDrawings && currentFrame.drawings && currentFrame.drawings.length > 0" class="content-preview">
+                    当前帧有 {{ currentFrame.drawings.length }} 个涂抹路径
+                  </div>
+                  <div v-if="!currentFrame.drawings || currentFrame.drawings.length === 0" class="no-content">
+                    当前帧暂无涂抹
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -363,7 +411,13 @@
 
           <div class="modal-actions">
             <button @click="closeApplyModal" class="btn btn-secondary">取消</button>
-            <button @click="applyToFrameRange" class="btn btn-primary">应用到选定范围</button>
+            <button 
+              @click="applyToFrameRange" 
+              class="btn btn-primary" 
+              :disabled="(!applyTexts && !applyDrawings) || (currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0))"
+            >
+              应用到选定范围
+            </button>
           </div>
         </div>
       </div>
@@ -388,7 +442,7 @@
             />
           </div>
           <p class="save-info">
-            将保存当前所有帧的文字内容、位置、样式以及全局设置
+            将保存当前所有帧的文字内容、涂抹路径、位置、样式以及全局设置
           </p>
           <div class="modal-actions">
             <button @click="closeSaveModal" class="btn btn-secondary">取消</button>
@@ -427,13 +481,19 @@
                 <p class="project-details">
                   帧数: {{ project.frames.length }} | 延迟: {{ project.settings.gifDelay }}ms
                 </p>
+                <p class="project-details" v-if="project.downloadedFrom" style="font-size: 12px; color: #007bff;">
+                  📥 来自云端预设
+                </p>
               </div>
                              <div class="project-actions">
-                <button @click="loadProject(project)" class="btn btn-primary btn-sm">
+                <button @click="loadProject(project)" class="btn btn-primary btn-sm" title="加载项目并可选择替换文字内容">
                   🔄 替换文字加载
                 </button>
-                <button @click="loadProjectDirectly(project)" class="btn btn-success btn-sm">
+                <button @click="loadProjectDirectly(project)" class="btn btn-success btn-sm" title="完整加载项目（包含图片、文字、涂抹）">
                   📁 直接加载
+                </button>
+                <button @click="applyProjectAsPreset(project)" class="btn btn-warning btn-sm" title="只应用文字和涂抹到当前图片">
+                  🎨 应用预设
                 </button>
                 <button @click="exportProject(project)" class="btn btn-info btn-sm">
                   📤 导出
@@ -742,6 +802,8 @@ export default {
       showApplyModal: false,
       applyStartFrame: 0,
       applyEndFrame: 0,
+      applyTexts: true,
+      applyDrawings: true,
       // 项目保存/加载
       showSaveModal: false,
       showLoadModal: false,
@@ -819,6 +881,13 @@ export default {
   beforeUnmount() {
     // 清理定时器
     this.stopPlay()
+    
+    // 清理画布
+    if (this.fabricCanvas) {
+      console.log('Disposing fabric canvas on unmount...')
+      this.fabricCanvas.dispose()
+      this.fabricCanvas = null
+    }
   },
 
   watch: {
@@ -2416,6 +2485,14 @@ export default {
 
     initCanvas() {
       console.log('Initializing canvas...')
+      
+      // 先销毁已存在的画布
+      if (this.fabricCanvas) {
+        console.log('Disposing existing fabric canvas...')
+        this.fabricCanvas.dispose()
+        this.fabricCanvas = null
+      }
+      
       this.canvas = this.$refs.canvas
       if (!this.canvas) {
         console.error('Canvas element not found')
@@ -2456,6 +2533,13 @@ export default {
       try {
         // 使用setTimeout确保DOM完全准备好
         setTimeout(() => {
+          // 双重检查，确保没有已存在的画布
+          if (this.fabricCanvas) {
+            console.log('Found existing canvas in setTimeout, disposing it...')
+            this.fabricCanvas.dispose()
+            this.fabricCanvas = null
+          }
+          
           this.fabricCanvas = new Canvas(this.canvas, {
             selection: true,
             preserveObjectStacking: true,
@@ -2493,6 +2577,13 @@ export default {
               // 点击空白区域时取消选择
               this.selectedTextIndex = -1
             }
+          })
+
+          // 监听画笔绘制完成事件
+          this.fabricCanvas.on('path:created', (e) => {
+            console.log('画笔绘制完成，自动保存涂鸦')
+            // 涂鸦完成后自动保存到当前帧
+            this.saveCurrentFrameTexts()
           })
 
           // 初始化画笔设置
@@ -3021,11 +3112,13 @@ export default {
     },
 
     applyToAllFrames() {
-      if (this.currentFrame.texts.length === 0) {
-        alert('当前帧没有文字可以应用')
-        return
-      }
-
+      const hasTexts = this.currentFrame.texts.length > 0
+      const hasDrawings = this.currentFrame.drawings && this.currentFrame.drawings.length > 0
+      
+      // 设置默认选择（只选择有内容的项目）
+      this.applyTexts = hasTexts
+      this.applyDrawings = hasDrawings
+      
       // 设置默认范围
       this.applyStartFrame = 0
       this.applyEndFrame = this.frames.length - 1
@@ -3033,7 +3126,29 @@ export default {
     },
 
     applyToFrameRange() {
-      if (this.currentFrame.texts.length === 0) {
+      // 检查是否有任何内容可以应用
+      const hasTexts = this.currentFrame.texts.length > 0
+      const hasDrawings = this.currentFrame.drawings && this.currentFrame.drawings.length > 0
+      
+      if (!hasTexts && !hasDrawings) {
+        alert('当前帧没有文字或涂抹内容可以应用')
+        return
+      }
+
+      // 检查是否有选择的内容
+      if (!this.applyTexts && !this.applyDrawings) {
+        alert('请至少选择一种内容进行应用')
+        return
+      }
+
+      // 检查是否有对应的内容
+      if (this.applyTexts && !hasTexts) {
+        alert('当前帧没有文字可以应用')
+        return
+      }
+      
+      if (this.applyDrawings && !hasDrawings) {
+        alert('当前帧没有涂抹可以应用')
         return
       }
 
@@ -3041,21 +3156,74 @@ export default {
       const start = Math.max(0, Math.min(this.applyStartFrame, this.frames.length - 1))
       const end = Math.max(start, Math.min(this.applyEndFrame, this.frames.length - 1))
 
-      const currentTexts = JSON.parse(JSON.stringify(this.currentFrame.texts))
+      let appliedCount = 0
+      const appliedItems = []
       
       for (let i = start; i <= end; i++) {
         // 跳过当前帧，避免重复应用
         if (i === this.currentFrameIndex) continue
         
-        this.frames[i].texts = JSON.parse(JSON.stringify(currentTexts))
+        // 应用文字
+        if (this.applyTexts && this.currentFrame.texts.length > 0) {
+          const currentTexts = JSON.parse(JSON.stringify(this.currentFrame.texts))
+          this.frames[i].texts = currentTexts
+        }
+        
+        // 应用涂抹
+        if (this.applyDrawings && this.currentFrame.drawings && this.currentFrame.drawings.length > 0) {
+          // 确保目标帧有drawings数组
+          if (!this.frames[i].drawings) {
+            this.frames[i].drawings = []
+          }
+          const currentDrawings = JSON.parse(JSON.stringify(this.currentFrame.drawings))
+          this.frames[i].drawings = currentDrawings
+        }
+        
+        appliedCount++
+      }
+
+      // 构建应用内容说明
+      if (this.applyTexts && this.currentFrame.texts.length > 0) {
+        appliedItems.push('文字')
+      }
+      if (this.applyDrawings && this.currentFrame.drawings && this.currentFrame.drawings.length > 0) {
+        appliedItems.push('涂抹')
       }
 
       this.showApplyModal = false
-      alert(`文字已应用到第 ${start + 1} 帧到第 ${end + 1} 帧`)
+      alert(`${appliedItems.join('和')}已应用到第 ${start + 1} 帧到第 ${end + 1} 帧（共 ${appliedCount} 帧）`)
     },
 
     closeApplyModal() {
       this.showApplyModal = false
+    },
+
+    // 强制刷新涂抹状态
+    forceRefreshDrawings() {
+      console.log('强制刷新涂抹状态...')
+      this.saveCurrentFrameTexts()
+      console.log('涂抹状态已刷新，当前涂抹数量:', this.currentFrame.drawings ? this.currentFrame.drawings.length : 0)
+      
+      // 强制更新Vue的响应式系统
+      this.$forceUpdate()
+    },
+
+    // 安全地重新初始化画布
+    async safeReinitCanvas() {
+      console.log('Safe reinitializing canvas...')
+      
+      // 先保存当前帧状态
+      if (this.fabricCanvas) {
+        this.saveCurrentFrameTexts()
+      }
+      
+      // 等待DOM更新
+      await this.$nextTick()
+      
+      // 重新初始化画布
+      this.initCanvas()
+      
+      console.log('Canvas safely reinitialized')
     },
 
     validateRange() {
@@ -3305,7 +3473,8 @@ export default {
         name: this.currentProjectName.trim(),
         frames: this.frames.map(frame => ({
           src: frame.src,
-          texts: JSON.parse(JSON.stringify(frame.texts))
+          texts: JSON.parse(JSON.stringify(frame.texts)),
+          drawings: JSON.parse(JSON.stringify(frame.drawings || []))
         })),
         settings: {
           gifDelay: this.gifDelay,
@@ -3318,7 +3487,8 @@ export default {
           type: this.originalImageData?.type || 'custom',
           frames: this.originalImageData?.frames || this.frames.map(frame => ({
             dataUrl: frame.src,
-            texts: frame.texts
+            texts: frame.texts,
+            drawings: frame.drawings || []
           })),
           gifInfo: this.originalImageData?.gifInfo || null
         } : null,
@@ -3396,6 +3566,23 @@ export default {
       }
     },
 
+    // 应用项目作为预设（只应用文字和涂抹，保持当前图片）
+    applyProjectAsPreset(project) {
+      if (!confirm(`确定要应用预设 "${project.name}" 到当前图片？\n\n这将清除当前的文字和涂抹，但保持图片不变。`)) {
+        return
+      }
+
+      try {
+        this.applyProjectData(project, true) // 第二个参数为 true，只应用文字和涂抹
+        console.log('预设应用成功:', project.name)
+        alert(`预设 "${project.name}" 应用成功！文字和涂抹已应用到当前图片。`)
+        this.showLoadModal = false
+      } catch (error) {
+        console.error('应用预设失败:', error)
+        alert('应用预设失败')
+      }
+    },
+
     // 带文字替换的加载项目
     loadProjectWithReplacements() {
       if (!this.selectedProject) return
@@ -3429,7 +3616,7 @@ export default {
     },
 
     // 应用项目数据到当前编辑器
-    async applyProjectData(project) {
+    async applyProjectData(project, onlyTextAndDrawings = false) {
       // 停止播放
       this.stopPlay()
 
@@ -3441,8 +3628,33 @@ export default {
         this.canvasSize = { ...project.settings.canvasSize }
       }
 
-      // 检查是否包含图片数据
-      if (project.imageData && project.imageData.frames) {
+      // 检查是否只应用文字和涂抹数据
+      if (onlyTextAndDrawings) {
+        console.log('Applying only texts and drawings - keeping current images')
+        
+        // 保持当前图片状态，不重新加载图片
+        // 只清空现有的文字和涂抹，然后应用新的
+        this.frames.forEach(frame => {
+          frame.texts = []
+          frame.drawings = []
+        })
+        
+        // 应用文字和涂抹数据
+        project.frames.forEach((savedFrame, index) => {
+          if (this.frames[index]) {
+            this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+            this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
+          }
+        })
+        
+        // 只重新绘制当前帧，不重新初始化画布
+        await this.$nextTick()
+        if (this.fabricCanvas) {
+          this.drawCurrentFrame()
+        } else {
+          await this.safeReinitCanvas()
+        }
+      } else if (project.imageData && project.imageData.frames) {
         console.log('Loading project with custom images')
         this.originalImageData = project.imageData
         this.hasCustomImages = true
@@ -3450,34 +3662,41 @@ export default {
         // 重新加载帧（这会使用 originalImageData）
         await this.loadFrames()
         
-        // 应用文字数据
+        // 应用文字和涂抹数据
         project.frames.forEach((savedFrame, index) => {
           if (this.frames[index]) {
             this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+            this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
           }
         })
         
         // 重新初始化画布
-        await this.$nextTick()
-        this.initCanvas()
+        await this.safeReinitCanvas()
       } else {
-        console.log('Loading project with default images')
-        this.hasCustomImages = false
-        this.originalImageData = null
+        console.log('Loading project without images - keeping current images')
         
-        // 重新加载默认帧
-        await this.loadFrames()
+        // 保持当前图片状态，不重新加载图片
+        // 只清空现有的文字和涂抹，然后应用新的
+        this.frames.forEach(frame => {
+          frame.texts = []
+          frame.drawings = []
+        })
         
-        // 应用文字数据
+        // 应用文字和涂抹数据
         project.frames.forEach((savedFrame, index) => {
           if (this.frames[index]) {
             this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
+            this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
           }
         })
         
-        // 重新初始化画布
+        // 只重新绘制当前帧，不重新初始化画布
         await this.$nextTick()
-        this.initCanvas()
+        if (this.fabricCanvas) {
+          this.drawCurrentFrame()
+        } else {
+          await this.safeReinitCanvas()
+        }
       }
 
       // 重置当前状态
@@ -3781,7 +4000,8 @@ export default {
           author: 'anonymous', // 可以后续添加用户系统
           frames: this.frames.map(frame => ({
             src: frame.src,
-            texts: JSON.parse(JSON.stringify(frame.texts))
+            texts: JSON.parse(JSON.stringify(frame.texts)),
+            drawings: JSON.parse(JSON.stringify(frame.drawings || []))
           })),
           settings: {
             gifDelay: this.gifDelay,
@@ -3793,7 +4013,8 @@ export default {
             type: this.originalImageData?.type || 'custom',
             frames: this.originalImageData?.frames || this.frames.map(frame => ({
               dataUrl: frame.src,
-              texts: frame.texts
+              texts: frame.texts,
+              drawings: frame.drawings || []
             })),
             gifInfo: this.originalImageData?.gifInfo || null
           } : null,
@@ -3862,7 +4083,19 @@ export default {
 
           localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
           
-          alert(`预设 "${preset.name}" 下载成功！`)
+          // 询问用户是否立即应用预设
+          if (confirm(`预设 "${preset.name}" 下载成功！\n\n是否立即应用到当前图片？（只会应用文字和涂抹，不会更改图片）`)) {
+            try {
+              await this.applyProjectData(projectData, true)
+              alert('预设已成功应用到当前图片！')
+            } catch (error) {
+              console.error('应用预设失败:', error)
+              alert('应用预设失败，但预设已保存到项目列表中')
+            }
+          } else {
+            alert(`预设 "${preset.name}" 已保存到项目列表！`)
+          }
+          
           this.showCloudModal = false
 
           // 更新下载计数
@@ -4415,6 +4648,90 @@ canvas {
 .apply-modal {
   max-width: 500px;
   width: 90%;
+}
+
+.apply-content-selection {
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.content-option {
+  margin-bottom: 15px;
+}
+
+.content-option:last-child {
+  margin-bottom: 0;
+}
+
+.content-option label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: #495057;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.content-option input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+}
+
+.content-preview {
+  margin-left: 24px;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+}
+
+.text-preview-item {
+  background: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #495057;
+  margin-bottom: 4px;
+  display: inline-block;
+  margin-right: 6px;
+}
+
+.text-preview-item:last-child {
+  margin-bottom: 0;
+}
+
+.no-content {
+  margin-left: 24px;
+  font-size: 12px;
+  color: #9e9e9e;
+  font-style: italic;
+}
+
+.no-any-content {
+  text-align: center;
+  padding: 20px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 8px;
+  color: #856404;
+}
+
+.no-any-content p {
+  margin: 8px 0;
+}
+
+.no-any-content p:first-child {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.no-any-content p:last-child {
+  font-size: 14px;
+  margin-bottom: 0;
 }
 
 .apply-info {
