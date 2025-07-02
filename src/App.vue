@@ -1027,7 +1027,9 @@ export default {
       originalImageData: null, // 存储原始图片数据用于分享
       defaultImageSrc: '/preset/kick.gif', // 默认图片路径 (public 目录)
       // Cloudflare Worker 配置
-              workerApiUrl: 'https://doro.page.20491504.xyz/api', // Cloudflare Worker API 域名
+              workerApiUrl: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? 'https://doro.page.20491504.xyz/api' 
+        : '/api', // 本地开发使用外部API，生产环境使用当前路径
       defaultTextStyle: {
         text: '新文字',
         fontSize: 24,
