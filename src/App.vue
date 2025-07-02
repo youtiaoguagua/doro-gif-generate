@@ -515,28 +515,25 @@ export default {
       // 清除画布
       this.fabricCanvas.clear()
 
-      // 绘制背景图片
+      // 使用已缓存的图片，避免重复网络请求
       const frame = this.frames[this.currentFrameIndex]
-      console.log('Loading image for frame:', frame.src)
       
-      FabricImage.fromURL(frame.src, {
-        crossOrigin: 'anonymous'
-      }).then((img) => {
-        console.log('Image loaded successfully, dimensions:', img.width, 'x', img.height)
+      try {
+        console.log('Using cached image for frame:', this.currentFrameIndex)
         
-        // 设置图片属性
-        img.set({
+        // 直接使用已缓存的图片对象创建 FabricImage
+        const fabricImg = new FabricImage(frame.img, {
           left: 0,
           top: 0,
           selectable: false,
           evented: false,
           // 缩放图片以适应画布
-          scaleX: this.canvasSize.width / img.width,
-          scaleY: this.canvasSize.height / img.height
+          scaleX: this.canvasSize.width / frame.img.naturalWidth,
+          scaleY: this.canvasSize.height / frame.img.naturalHeight
         })
         
-        console.log('Adding image to canvas...')
-        this.fabricCanvas.add(img)
+        console.log('Adding cached image to canvas...')
+        this.fabricCanvas.add(fabricImg)
 
         // 添加文字
         console.log('Adding texts to canvas...')
@@ -544,15 +541,34 @@ export default {
         
         // 渲染画布
         this.fabricCanvas.renderAll()
-        console.log('Frame drawn successfully')
+        console.log('Frame drawn successfully using cached image')
         
-      }).catch((error) => {
-        console.error('Failed to load image:', error)
-        console.error('Image source:', frame.src)
+      } catch (error) {
+        console.error('Failed to create fabric image from cached image:', error)
         
-        // 尝试显示错误信息
-        alert(`图片加载失败: ${frame.src}`)
-      })
+        // 降级到URL加载方式（备用方案）
+        console.log('Falling back to URL loading...')
+        FabricImage.fromURL(frame.src, {
+          crossOrigin: 'anonymous'
+        }).then((img) => {
+          img.set({
+            left: 0,
+            top: 0,
+            selectable: false,
+            evented: false,
+            scaleX: this.canvasSize.width / img.width,
+            scaleY: this.canvasSize.height / img.height
+          })
+          
+          this.fabricCanvas.add(img)
+          this.addTextsToCanvas()
+          this.fabricCanvas.renderAll()
+          
+        }).catch((urlError) => {
+          console.error('Failed to load image from URL:', urlError)
+          alert(`图片加载失败: ${frame.src}`)
+        })
+      }
     },
 
     addTextsToCanvas() {
@@ -882,7 +898,7 @@ export default {
           console.log(`处理第 ${i + 1} 帧...`)
           this.currentFrameIndex = i
           
-          const frameCanvas = await this.createFrameCanvas(i)
+          const frameCanvas = this.createFrameCanvas(i)
           
           // modern-gif 需要的格式：直接传递 Canvas 元素
           frames.push({
@@ -919,70 +935,54 @@ export default {
     },
 
     async createFrameCanvas(frameIndex) {
-      return new Promise((resolve, reject) => {
-        try {
-          // 创建临时画布
-          const tempCanvas = document.createElement('canvas')
-          tempCanvas.width = this.canvasSize.width
-          tempCanvas.height = this.canvasSize.height
-          const ctx = tempCanvas.getContext('2d')
+      try {
+        // 创建临时画布
+        const tempCanvas = document.createElement('canvas')
+        tempCanvas.width = this.canvasSize.width
+        tempCanvas.height = this.canvasSize.height
+        const ctx = tempCanvas.getContext('2d')
 
-          const frame = this.frames[frameIndex]
-          
-          // 加载图片
-          const img = new Image()
-          img.crossOrigin = 'anonymous'
-          
-          img.onload = () => {
-            try {
-              // 绘制背景图片
-              ctx.drawImage(img, 0, 0, this.canvasSize.width, this.canvasSize.height)
+        const frame = this.frames[frameIndex]
+        
+        // 直接使用已缓存的图片，无需重新加载
+        console.log(`Creating frame canvas ${frameIndex} using cached image`)
+        
+        // 绘制背景图片（使用已缓存的图片对象）
+        ctx.drawImage(frame.img, 0, 0, this.canvasSize.width, this.canvasSize.height)
 
-              // 绘制文字
-              frame.texts.forEach((textData) => {
-                ctx.save()
-                ctx.font = `${textData.fontWeight} ${textData.fontSize}px ${textData.fontFamily}`
-                ctx.fillStyle = textData.fill
-                ctx.strokeStyle = textData.stroke
-                ctx.lineWidth = textData.strokeWidth
-                ctx.textAlign = 'left'
-                ctx.textBaseline = 'top'
+        // 绘制文字
+        frame.texts.forEach((textData) => {
+          ctx.save()
+          ctx.font = `${textData.fontWeight} ${textData.fontSize}px ${textData.fontFamily}`
+          ctx.fillStyle = textData.fill
+          ctx.strokeStyle = textData.stroke
+          ctx.lineWidth = textData.strokeWidth
+          ctx.textAlign = 'left'
+          ctx.textBaseline = 'top'
 
-                // 处理多行文字
-                const lines = textData.text.split('\n')
-                lines.forEach((line, lineIndex) => {
-                  const y = textData.top + (lineIndex * textData.fontSize * 1.2)
-                  
-                  // 如果有描边，先绘制描边
-                  if (textData.strokeWidth > 0) {
-                    ctx.strokeText(line, textData.left, y)
-                  }
-                  
-                  // 绘制填充文字
-                  ctx.fillText(line, textData.left, y)
-                })
-                
-                ctx.restore()
-              })
-
-              resolve(tempCanvas)
-            } catch (error) {
-              console.error('绘制画布失败:', error)
-              reject(error)
+          // 处理多行文字
+          const lines = textData.text.split('\n')
+          lines.forEach((line, lineIndex) => {
+            const y = textData.top + (lineIndex * textData.fontSize * 1.2)
+            
+            // 如果有描边，先绘制描边
+            if (textData.strokeWidth > 0) {
+              ctx.strokeText(line, textData.left, y)
             }
-          }
+            
+            // 绘制填充文字
+            ctx.fillText(line, textData.left, y)
+          })
+          
+          ctx.restore()
+        })
 
-          img.onerror = (error) => {
-            console.error('图片加载失败:', error)
-            reject(new Error(`图片加载失败: ${frame.src}`))
-          }
-
-          img.src = frame.src
-        } catch (error) {
-          console.error('创建画布失败:', error)
-          reject(error)
-        }
-      })
+        return tempCanvas
+        
+      } catch (error) {
+        console.error('创建画布失败:', error)
+        throw error
+      }
     }
   }
 }
