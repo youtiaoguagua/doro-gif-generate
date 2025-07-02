@@ -33,6 +33,9 @@
             <button @click="addText" class="btn btn-primary">
               <span>➕</span> 添加文字
             </button>
+            <button @click="toggleDrawing" class="btn" :class="isDrawingMode ? 'btn-warning' : 'btn-outline'">
+              <span>🖌️</span> {{ isDrawingMode ? '停止画笔' : '画笔工具' }}
+            </button>
             <button @click="togglePlay" class="btn" :class="isPlaying ? 'btn-warning' : 'btn-info'">
               <span>{{ isPlaying ? '⏸️' : '▶️' }}</span> {{ isPlaying ? '暂停' : '播放' }}
             </button>
@@ -191,6 +194,58 @@
             @click="selectText(index)"
           >
             <span class="text-preview">{{ text.text.slice(0, 10) }}{{ text.text.length > 10 ? '...' : '' }}</span>
+          </div>
+        </div>
+
+        <!-- 画笔设置 -->
+        <div class="brush-settings">
+          <h3>画笔工具</h3>
+          
+          <div class="setting-group">
+            <button @click="toggleDrawing" class="btn" :class="isDrawingMode ? 'btn-warning' : 'btn-primary'">
+              <span>🖌️</span> {{ isDrawingMode ? '停止画笔' : '开启画笔' }}
+            </button>
+          </div>
+
+          <div v-if="isDrawingMode" class="brush-controls">
+            <div class="setting-group">
+              <label>画笔大小: {{ brushSize }}px</label>
+              <input 
+                type="range" 
+                v-model="brushSize" 
+                @input="updateBrushSettings"
+                min="1" 
+                max="50" 
+                step="1"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label>画笔颜色:</label>
+              <input 
+                type="color" 
+                v-model="brushColor" 
+                @change="updateBrushSettings"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label>透明度: {{ Math.round(brushOpacity * 100) }}%</label>
+              <input 
+                type="range" 
+                v-model="brushOpacity" 
+                @input="updateBrushSettings"
+                min="0.1" 
+                max="1" 
+                step="0.1"
+              />
+            </div>
+
+            <div class="setting-group">
+              <button @click="clearDrawings" class="btn btn-danger btn-sm">
+                <span>🗑️</span> 清除涂鸦
+              </button>
+            </div>
           </div>
         </div>
 
@@ -658,7 +713,7 @@
 </template>
 
 <script>
-import { Canvas, FabricText, FabricImage } from 'fabric'
+import { Canvas, FabricText, FabricImage, Path, PencilBrush } from 'fabric'
 import { encode } from 'modern-gif'
 import { saveAs } from 'file-saver'
 import { parseGIF, decompressFrames } from 'gifuct-js'
@@ -721,12 +776,17 @@ export default {
         stroke: '#ffffff',
         left: 200,
         top: 200
-      }
+      },
+      // 画笔工具
+      isDrawingMode: false,
+      brushSize: 10,
+      brushColor: '#FF0000',
+      brushOpacity: 1.0
     }
   },
   computed: {
     currentFrame() {
-      return this.frames[this.currentFrameIndex] || { texts: [] }
+      return this.frames[this.currentFrameIndex] || { texts: [], drawings: [] }
     },
     currentText() {
       if (this.selectedTextIndex !== -1 && this.currentFrame.texts[this.selectedTextIndex]) {
@@ -743,6 +803,10 @@ export default {
       
       await this.loadFrames()
       console.log('Frames loaded successfully')
+      
+      // 确保所有帧都有drawings数组
+      this.ensureFramesHaveDrawings()
+      
       await this.$nextTick() // 确保DOM已渲染
       console.log('DOM updated, initializing canvas...')
       this.initCanvas()
@@ -770,6 +834,16 @@ export default {
     }
   },
   methods: {
+    // 确保所有帧都有drawings数组
+    ensureFramesHaveDrawings() {
+      this.frames.forEach(frame => {
+        if (!frame.drawings) {
+          frame.drawings = []
+        }
+      })
+      console.log('已确保所有帧都有drawings数组')
+    },
+
     async loadFrames() {
       console.log('开始加载帧...')
       
@@ -792,7 +866,9 @@ export default {
             this.frames.push({
               src: frameData.dataUrl,
               img: img,
-              texts: frameData.texts || []
+              texts: frameData.texts || [],
+              drawings: frameData.drawings || [],
+              drawings: frameData.drawings || []
             })
           }
           console.log(`Loaded ${this.frames.length} custom frames`)
@@ -853,7 +929,8 @@ export default {
         this.frames.push({
           src: dataUrl,
           img: img,
-          texts: []
+          texts: [],
+          drawings: []
         })
       }
       
@@ -1192,12 +1269,14 @@ export default {
               src: dataUrl,
               img: img,
               texts: [],
+              drawings: [],
               delay: frameDelay
             })
             
             processedFrames.push({
               dataUrl: dataUrl,
               texts: [],
+              drawings: [],
               delay: frameDelay
             })
             
@@ -1374,12 +1453,14 @@ export default {
             this.frames.push({
               src: dataUrl,
               img: img,
-              texts: []
+              texts: [],
+              drawings: []
             })
             
             processedFrames.push({
               dataUrl: dataUrl,
-              texts: []
+              texts: [],
+              drawings: []
             })
             
           } catch (frameError) {
@@ -2414,6 +2495,26 @@ export default {
             }
           })
 
+          // 初始化画笔设置
+          this.fabricCanvas.isDrawingMode = this.isDrawingMode
+          
+          // 确保画笔对象存在并初始化
+          if (!this.fabricCanvas.freeDrawingBrush) {
+            console.log('初始化画笔对象...')
+            // 创建默认画笔（PencilBrush）
+            this.fabricCanvas.freeDrawingBrush = new PencilBrush(this.fabricCanvas)
+          }
+          
+          // 设置画笔属性
+          this.updateBrushSettings()
+          
+          console.log('画笔初始化完成:', {
+            isDrawingMode: this.fabricCanvas.isDrawingMode,
+            hasBrush: !!this.fabricCanvas.freeDrawingBrush,
+            brushWidth: this.fabricCanvas.freeDrawingBrush?.width,
+            brushColor: this.fabricCanvas.freeDrawingBrush?.color
+          })
+
           // 绘制第一帧
           if (this.frames.length > 0) {
             this.drawCurrentFrame()
@@ -2486,6 +2587,16 @@ export default {
         console.log('Adding texts to canvas...')
         this.addTextsToCanvas()
         
+        // 添加涂鸦
+        console.log('Adding drawings to canvas...')
+        this.addDrawingsToCanvas()
+        
+        // 恢复画笔模式状态
+        this.fabricCanvas.isDrawingMode = this.isDrawingMode
+        if (this.isDrawingMode && this.fabricCanvas.freeDrawingBrush) {
+          this.updateBrushSettings()
+        }
+        
         // 渲染画布
         this.fabricCanvas.renderAll()
         console.log('Frame drawn successfully using cached image')
@@ -2509,6 +2620,14 @@ export default {
           
           this.fabricCanvas.add(img)
           this.addTextsToCanvas()
+          this.addDrawingsToCanvas()
+          
+          // 恢复画笔模式状态
+          this.fabricCanvas.isDrawingMode = this.isDrawingMode
+          if (this.isDrawingMode && this.fabricCanvas.freeDrawingBrush) {
+            this.updateBrushSettings()
+          }
+          
           this.fabricCanvas.renderAll()
           
         }).catch((urlError) => {
@@ -2540,6 +2659,36 @@ export default {
           rotatingPointOffset: 40
         })
         this.fabricCanvas.add(text)
+      })
+    },
+
+    addDrawingsToCanvas() {
+      const frame = this.currentFrame
+      if (!frame.drawings || frame.drawings.length === 0) {
+        return
+      }
+      
+      frame.drawings.forEach((drawingData) => {
+        try {
+          // 创建Path对象
+          const path = new Path(drawingData.path, {
+            left: drawingData.left || 0,
+            top: drawingData.top || 0,
+            stroke: drawingData.stroke,
+            strokeWidth: drawingData.strokeWidth,
+            fill: drawingData.fill || '',
+            scaleX: drawingData.scaleX || 1,
+            scaleY: drawingData.scaleY || 1,
+            angle: drawingData.angle || 0,
+            selectable: true,
+            evented: true
+          })
+          
+          this.fabricCanvas.add(path)
+          console.log('添加了一个涂鸦路径')
+        } catch (error) {
+          console.error('添加涂鸦路径失败:', error)
+        }
       })
     },
 
@@ -2659,9 +2808,98 @@ export default {
       this.fabricCanvas.renderAll()
     },
 
+    // 画笔工具方法
+    toggleDrawing() {
+      this.isDrawingMode = !this.isDrawingMode
+      
+      console.log(`切换画笔模式: ${this.isDrawingMode ? '开启' : '关闭'}`)
+      
+      if (!this.fabricCanvas) {
+        console.error('画布未初始化')
+        return
+      }
+      
+      this.fabricCanvas.isDrawingMode = this.isDrawingMode
+      
+      if (this.isDrawingMode) {
+        // 开启画笔模式
+        this.selectedTextIndex = -1 // 取消文字选择
+        this.fabricCanvas.discardActiveObject()
+        
+        // 确保画笔设置正确
+        this.updateBrushSettings()
+        
+        // 验证画笔状态
+        console.log('画笔模式状态检查:', {
+          isDrawingMode: this.fabricCanvas.isDrawingMode,
+          hasBrush: !!this.fabricCanvas.freeDrawingBrush,
+          brushWidth: this.fabricCanvas.freeDrawingBrush?.width,
+          brushColor: this.fabricCanvas.freeDrawingBrush?.color
+        })
+        
+        console.log('✅ 画笔模式已开启')
+      } else {
+        // 关闭画笔模式
+        console.log('❌ 画笔模式已关闭')
+      }
+      
+      this.fabricCanvas.renderAll()
+    },
+
+    updateBrushSettings() {
+      if (!this.fabricCanvas) {
+        console.log('画布未初始化，跳过画笔设置')
+        return
+      }
+      
+      // 确保画笔对象存在
+      if (!this.fabricCanvas.freeDrawingBrush) {
+        console.log('创建画笔对象...')
+        this.fabricCanvas.freeDrawingBrush = new PencilBrush(this.fabricCanvas)
+      }
+      
+      // 设置画笔属性
+      this.fabricCanvas.freeDrawingBrush.width = this.brushSize
+      this.fabricCanvas.freeDrawingBrush.color = this.hexToRgba(this.brushColor, this.brushOpacity)
+      
+      console.log(`画笔设置更新: 大小=${this.brushSize}, 颜色=${this.brushColor}, 透明度=${this.brushOpacity}`)
+      console.log('当前画笔对象:', this.fabricCanvas.freeDrawingBrush)
+    },
+
+    // 将十六进制颜色转换为带透明度的rgba
+    hexToRgba(hex, alpha) {
+      const r = parseInt(hex.slice(1, 3), 16)
+      const g = parseInt(hex.slice(3, 5), 16)
+      const b = parseInt(hex.slice(5, 7), 16)
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`
+    },
+
+    clearDrawings() {
+      if (!this.fabricCanvas) return
+      
+      if (confirm('确定要清除当前帧的所有涂鸦吗？此操作不可撤销。')) {
+        // 获取所有非文字对象（即涂鸦路径）
+        const objects = this.fabricCanvas.getObjects()
+        const drawingObjects = objects.filter(obj => 
+          obj.type === 'path' && obj.textDataIndex === undefined
+        )
+        
+        // 删除涂鸦对象
+        drawingObjects.forEach(obj => {
+          this.fabricCanvas.remove(obj)
+        })
+        
+        this.fabricCanvas.renderAll()
+        console.log(`已清除 ${drawingObjects.length} 个涂鸦对象`)
+      }
+    },
+
     saveCurrentFrameTexts() {
-      // 从fabric对象更新文字位置
+      if (!this.fabricCanvas) return
+      
       const fabricObjects = this.fabricCanvas.getObjects()
+      
+      // 更新文字位置
       fabricObjects.forEach(obj => {
         if (obj.textDataIndex !== undefined) {
           const textData = this.currentFrame.texts[obj.textDataIndex]
@@ -2671,6 +2909,32 @@ export default {
           }
         }
       })
+      
+      // 保存涂鸦路径
+      const drawings = fabricObjects.filter(obj => 
+        obj.type === 'path' && obj.textDataIndex === undefined
+      )
+      
+      // 确保当前帧有drawings数组
+      if (!this.currentFrame.drawings) {
+        this.currentFrame.drawings = []
+      }
+      
+      // 序列化涂鸦对象
+      this.currentFrame.drawings = drawings.map(path => ({
+        type: 'path',
+        path: path.path,
+        stroke: path.stroke,
+        strokeWidth: path.strokeWidth,
+        fill: path.fill,
+        left: path.left,
+        top: path.top,
+        scaleX: path.scaleX,
+        scaleY: path.scaleY,
+        angle: path.angle
+      }))
+      
+      console.log(`保存了 ${this.currentFrame.drawings.length} 个涂鸦路径`)
     },
 
     // 播放控制方法
@@ -3743,6 +4007,8 @@ export default {
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   height: fit-content;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .frames-panel h3 {
@@ -3966,6 +4232,8 @@ canvas {
   padding: 20px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.1);
   height: fit-content;
+  max-height: 80vh;
+  overflow-y: auto;
 }
 
 .settings-panel h3, .settings-panel h4 {
@@ -3976,6 +4244,26 @@ canvas {
 
 .text-settings {
   margin-bottom: 20px;
+}
+
+/* 画笔设置样式 */
+.brush-settings {
+  margin-bottom: 20px;
+  border-top: 2px solid #f0f0f0;
+  padding-top: 15px;
+}
+
+.brush-controls {
+  margin-top: 10px;
+}
+
+.brush-settings h3 {
+  color: #333;
+  font-size: 1.1em;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .setting-group {
@@ -4964,6 +5252,37 @@ canvas {
     -webkit-text-fill-color: initial;
   }
 }
+
+/* 面板滚动条样式 */
+.frames-panel::-webkit-scrollbar,
+.settings-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.frames-panel::-webkit-scrollbar-track,
+.settings-panel::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+.frames-panel::-webkit-scrollbar-thumb,
+.settings-panel::-webkit-scrollbar-thumb {
+  background: rgba(118, 75, 162, 0.4);
+  border-radius: 3px;
+  transition: all 0.3s ease;
+}
+
+.frames-panel::-webkit-scrollbar-thumb:hover,
+.settings-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(118, 75, 162, 0.6);
+}
+
+/* Firefox 滚动条样式 */
+.frames-panel,
+.settings-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(118, 75, 162, 0.4) rgba(0, 0, 0, 0.05);
+}
   
     @media (max-width: 1200px) {
     #app {
@@ -4976,6 +5295,7 @@ canvas {
     
     .frames-panel, .settings-panel {
       width: 100%;
+      max-height: 50vh;
     }
     
     .frames-grid {
