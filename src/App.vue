@@ -5,7 +5,7 @@
     </div>
 
     <div class="main-container">
-      <!-- 左侧：图片帧列表 -->
+              <!-- 左侧：图片帧列表 -->
       <div class="frames-panel">
         <h3>图片帧 ({{ frames.length }}帧)</h3>
         <div class="frames-grid">
@@ -206,6 +206,13 @@
               max="500" 
               step="10"
             />
+          </div>
+          <div class="setting-group">
+            <label>帧播放顺序:</label>
+            <select v-model="frameOrder" @change="onFrameOrderChange">
+              <option value="normal">正序播放 (1→2→3→4...)</option>
+              <option value="reverse">倒序播放 (4→3→2→1...)</option>
+            </select>
           </div>
           <div class="setting-group">
             <button @click="applyToAllFrames" class="btn btn-secondary">
@@ -672,6 +679,7 @@ export default {
       showPreview: false,
       previewUrl: '',
       gifDelay: 80,
+      frameOrder: 'normal', // 帧播放顺序：'normal' 正序，'reverse' 倒序
       // 播放控制
       isPlaying: false,
       playTimer: null,
@@ -2719,6 +2727,35 @@ export default {
       this.drawCurrentFrame()
     },
 
+    // 帧顺序变化处理
+    onFrameOrderChange() {
+      if (this.frames.length <= 1) {
+        return
+      }
+
+      console.log('帧顺序变化为:', this.frameOrder)
+
+      // 停止播放
+      if (this.isPlaying) {
+        this.stopPlay()
+      }
+
+      // 保存当前帧的文字状态
+      this.saveCurrentFrameTexts()
+
+      // 反转帧数组
+      this.frames.reverse()
+
+      // 调整当前帧索引（保持在相同的图片帧上）
+      this.currentFrameIndex = this.frames.length - 1 - this.currentFrameIndex
+
+      // 重新绘制当前帧
+      this.selectedTextIndex = -1
+      this.drawCurrentFrame()
+
+      console.log('帧顺序已切换到:', this.frameOrder)
+    },
+
     applyToAllFrames() {
       if (this.currentFrame.texts.length === 0) {
         alert('当前帧没有文字可以应用')
@@ -3008,6 +3045,7 @@ export default {
         })),
         settings: {
           gifDelay: this.gifDelay,
+          frameOrder: this.frameOrder,
           defaultTextStyle: JSON.parse(JSON.stringify(this.defaultTextStyle)),
           canvasSize: { ...this.canvasSize }
         },
@@ -3133,6 +3171,7 @@ export default {
 
       // 恢复设置
       this.gifDelay = project.settings.gifDelay || 80
+      this.frameOrder = project.settings.frameOrder || 'normal'
       this.defaultTextStyle = { ...project.settings.defaultTextStyle }
       if (project.settings.canvasSize) {
         this.canvasSize = { ...project.settings.canvasSize }
