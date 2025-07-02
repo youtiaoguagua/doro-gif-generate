@@ -281,6 +281,11 @@
         </div>
       </div>
     </div>
+
+    <!-- 页脚 -->
+    <div class="footer">
+      <p>Powered by <span class="signature">youtiaoguagua</span></p>
+    </div>
   </div>
 </template>
 
@@ -1036,7 +1041,7 @@ export default {
   font-family: 'Microsoft YaHei', Arial, sans-serif;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   min-height: 100vh;
-  padding: 20px;
+  padding: 20px 20px 80px 20px; /* 底部增加80px避免被页脚遮挡 */
 }
 
 .header {
@@ -1540,25 +1545,69 @@ canvas {
   font-size: 12px;
 }
 
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  border-top: 1px solid #e9ecef;
-  padding-top: 15px;
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    border-top: 1px solid #e9ecef;
+    padding-top: 15px;
+  }
+
+/* 页脚样式 */
+.footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px 20px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  z-index: 1000;
 }
 
-@media (max-width: 1200px) {
-  .main-container {
-    flex-direction: column;
-  }
-  
-  .frames-panel, .settings-panel {
-    width: 100%;
-  }
-  
-  .frames-grid {
-    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+.footer p {
+  margin: 0;
+}
+
+.signature {
+  color: #ffffff;
+  font-weight: 600;
+  /* text-shadow: 1px 1px 2px rgba(0,0,0,0.3); */
+  background: #000;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-size: 16px;
+  letter-spacing: 1px;
+}
+
+/* Safari和其他不支持background-clip: text的浏览器的回退样式 */
+@supports not (-webkit-background-clip: text) {
+  .signature {
+    color: #ffffff;
+    -webkit-text-fill-color: initial;
   }
 }
+  
+    @media (max-width: 1200px) {
+    #app {
+      padding: 15px 15px 80px 15px;
+    }
+    
+    .main-container {
+      flex-direction: column;
+    }
+    
+    .frames-panel, .settings-panel {
+      width: 100%;
+    }
+    
+    .frames-grid {
+      grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    }
+  }
 </style>
