@@ -27,19 +27,22 @@
         <div class="editor-header">
           <h3>编辑帧 {{ currentFrameIndex + 1 }} {{ hasCustomImages ? '(自定义图片)' : '(默认图片)' }}</h3>
           <div class="controls">
-            <button @click="addText" class="btn btn-primary">
+            <button @click="addText" class="btn btn-primary btn-sm">
               <span>➕</span> 添加文字
             </button>
-            <button @click="toggleDrawing" class="btn" :class="isDrawingMode ? 'btn-warning' : 'btn-outline'">
+            <button @click="toggleDrawing" class="btn btn-sm" :class="isDrawingMode ? 'btn-warning' : 'btn-outline'">
               <span>🖌️</span> {{ isDrawingMode ? '停止画笔' : '画笔工具' }}
             </button>
-            <button @click="togglePlay" class="btn" :class="isPlaying ? 'btn-warning' : 'btn-info'">
+            <button @click="showStickerUpload" class="btn btn-warning btn-sm">
+              <span>🏷️</span> 上传贴图
+            </button>
+            <button @click="togglePlay" class="btn btn-sm" :class="isPlaying ? 'btn-warning' : 'btn-info'">
               <span>{{ isPlaying ? '⏸️' : '▶️' }}</span> {{ isPlaying ? '暂停' : '播放' }}
             </button>
-            <button @click="previewGif" class="btn btn-secondary" :disabled="isGenerating">
+            <button @click="previewGif" class="btn btn-secondary btn-sm" :disabled="isGenerating">
               <span>👁️</span> 预览GIF
             </button>
-            <button @click="generateGif" class="btn btn-success" :disabled="isGenerating">
+            <button @click="generateGif" class="btn btn-success btn-sm" :disabled="isGenerating">
               <span>⬇️</span> {{ isGenerating ? '生成中...' : '生成GIF' }}
             </button>
           </div>
@@ -197,6 +200,84 @@
           </div>
         </div>
 
+        <!-- 贴图设置 -->
+        <div class="sticker-settings">
+          <h3>贴图设置</h3>
+          
+          <div v-if="selectedStickerIndex !== -1" class="sticker-controls">
+            <div class="setting-group">
+              <label>贴图名称:</label>
+              <input 
+                type="text" 
+                v-model="currentSticker.name" 
+                @input="updateSticker"
+                placeholder="贴图名称"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label>宽度: {{ Math.round(currentSticker.width) }}px</label>
+              <input 
+                type="range" 
+                v-model="currentSticker.width" 
+                @input="updateSticker"
+                min="20" 
+                max="400" 
+                step="5"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label>高度: {{ Math.round(currentSticker.height) }}px</label>
+              <input 
+                type="range" 
+                v-model="currentSticker.height" 
+                @input="updateSticker"
+                min="20" 
+                max="400" 
+                step="5"
+              />
+            </div>
+
+            <div class="setting-group">
+              <label>透明度: {{ Math.round(currentSticker.opacity * 100) }}%</label>
+              <input 
+                type="range" 
+                v-model="currentSticker.opacity" 
+                @input="updateSticker"
+                min="0.1" 
+                max="1" 
+                step="0.1"
+              />
+            </div>
+
+            <div class="setting-group">
+              <button @click="deleteSelectedSticker" class="btn btn-danger">
+                <span>🗑️</span> 删除贴图
+              </button>
+            </div>
+          </div>
+
+          <div v-else class="no-sticker-selected">
+            <p>点击"上传贴图"添加贴图，或选择已有贴图进行编辑</p>
+          </div>
+
+          <!-- 贴图列表 -->
+          <div v-if="currentFrame.stickers && currentFrame.stickers.length > 0" class="stickers-list">
+            <h4>贴图列表:</h4>
+            <div 
+              v-for="(sticker, index) in currentFrame.stickers" 
+              :key="index"
+              class="sticker-item"
+              :class="{ active: selectedStickerIndex === index }"
+              @click="selectSticker(index)"
+            >
+              <img :src="sticker.src" :alt="sticker.name" class="sticker-thumbnail" />
+              <span class="sticker-name">{{ sticker.name || `贴图${index + 1}` }}</span>
+            </div>
+          </div>
+        </div>
+
         <!-- 画笔设置 -->
         <div class="brush-settings">
           <h3>画笔工具</h3>
@@ -314,9 +395,9 @@
             <!-- 应用内容选择 -->
             <div class="apply-content-selection">
               <!-- 当前帧没有任何内容时的提示 -->
-              <div v-if="currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0)" class="no-any-content">
-                <p>😅 当前帧暂无文字或涂抹内容</p>
-                <p>你可以先添加一些文字或使用画笔工具涂抹，然后再来应用到其他帧。</p>
+              <div v-if="currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0) && (!currentFrame.stickers || currentFrame.stickers.length === 0)" class="no-any-content">
+                <p>😅 当前帧暂无文字、涂抹或贴图内容</p>
+                <p>你可以先添加一些文字、使用画笔工具涂抹或上传贴图，然后再来应用到其他帧。</p>
                 <div class="debug-actions">
                   <button @click="forceRefreshDrawings" class="btn btn-outline btn-sm" style="margin-top: 10px;">
                     🔄 刷新涂抹状态
@@ -351,6 +432,22 @@
                   </div>
                   <div v-if="!currentFrame.drawings || currentFrame.drawings.length === 0" class="no-content">
                     当前帧暂无涂抹
+                  </div>
+                </div>
+                
+                <div class="content-option">
+                  <label>
+                    <input type="checkbox" v-model="applyStickers" :disabled="!currentFrame.stickers || currentFrame.stickers.length === 0" />
+                    应用贴图
+                  </label>
+                  <div v-if="applyStickers && currentFrame.stickers && currentFrame.stickers.length > 0" class="content-preview">
+                    <div v-for="(sticker, index) in currentFrame.stickers" :key="index" class="sticker-preview-item">
+                      <img :src="sticker.src" :alt="sticker.name" class="mini-sticker-preview" />
+                      {{ sticker.name || `贴图${index + 1}` }}
+                    </div>
+                  </div>
+                  <div v-if="!currentFrame.stickers || currentFrame.stickers.length === 0" class="no-content">
+                    当前帧暂无贴图
                   </div>
                 </div>
               </div>
@@ -414,7 +511,7 @@
             <button 
               @click="applyToFrameRange" 
               class="btn btn-primary" 
-              :disabled="(!applyTexts && !applyDrawings) || (currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0))"
+              :disabled="(!applyTexts && !applyDrawings && !applyStickers) || (currentFrame.texts.length === 0 && (!currentFrame.drawings || currentFrame.drawings.length === 0) && (!currentFrame.stickers || currentFrame.stickers.length === 0))"
             >
               应用到选定范围
             </button>
@@ -624,7 +721,10 @@
 
                 
                 <div class="preset-card-footer">
-                  <span class="preset-author">👤 {{ preset.author }}</span>
+                  <div class="preset-info">
+                    <span class="preset-author">👤 {{ preset.author }}</span>
+                    <span class="preset-date">📅 {{ formatDate(preset.createdAt) }}</span>
+                  </div>
                   <div class="preset-card-actions" @click.stop>
                     <button @click="downloadCloudPreset(preset)" class="btn-icon" title="下载预设">
                       📥
@@ -765,6 +865,53 @@
       </div>
     </div>
 
+    <!-- 贴图上传模态框 -->
+    <div v-if="showStickerUploadModal" class="modal-overlay" @click="closeStickerUpload">
+      <div class="modal-content upload-sticker-modal" @click.stop>
+        <div class="modal-header">
+          <h3>🏷️ 上传贴图</h3>
+          <button @click="closeStickerUpload" class="close-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="upload-sticker-info">
+            <p>🎨 上传贴图来装饰你的 GIF！</p>
+            <p>🖼️ 支持 PNG、JPG、GIF 等格式</p>
+            <p>💡 建议使用透明背景的 PNG 图片效果更佳</p>
+          </div>
+
+          <div v-if="isProcessingSticker" class="processing">
+            <p>🔄 正在处理贴图，请稍候...</p>
+          </div>
+
+          <div v-else class="upload-zone">
+            <input 
+              type="file" 
+              ref="stickerInput"
+              @change="handleStickerUpload"
+              accept="image/*"
+              style="display: none"
+            />
+            <div 
+              class="drop-zone"
+              @click="$refs.stickerInput.click()"
+              @dragover.prevent
+              @drop.prevent="handleStickerDrop"
+            >
+              <div class="drop-content">
+                <span class="upload-icon">🏷️</span>
+                <p>点击选择贴图或拖拽到此处</p>
+                <small>支持 PNG、JPG、GIF 格式，建议透明背景</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button @click="closeStickerUpload" class="btn btn-secondary">关闭</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 页脚 -->
     <div class="footer">
       <p>Powered by <span class="signature">youtiaoguagua</span></p>
@@ -804,6 +951,7 @@ export default {
       applyEndFrame: 0,
       applyTexts: true,
       applyDrawings: true,
+      applyStickers: true,
       // 项目保存/加载
       showSaveModal: false,
       showLoadModal: false,
@@ -823,6 +971,10 @@ export default {
       // 图片上传功能
       showUploadImageModal: false,
       isProcessingImage: false,
+      // 贴图上传功能
+      showStickerUploadModal: false,
+      isProcessingSticker: false,
+      selectedStickerIndex: -1,
       hasCustomImages: false,
       originalImageData: null, // 存储原始图片数据用于分享
       defaultImageSrc: '/preset/kick.gif', // 默认图片路径 (public 目录)
@@ -848,13 +1000,27 @@ export default {
   },
   computed: {
     currentFrame() {
-      return this.frames[this.currentFrameIndex] || { texts: [], drawings: [] }
+      return this.frames[this.currentFrameIndex] || { texts: [], drawings: [], stickers: [] }
     },
     currentText() {
       if (this.selectedTextIndex !== -1 && this.currentFrame.texts[this.selectedTextIndex]) {
         return this.currentFrame.texts[this.selectedTextIndex]
       }
       return { ...this.defaultTextStyle }
+    },
+    currentSticker() {
+      if (this.selectedStickerIndex !== -1 && this.currentFrame.stickers && this.currentFrame.stickers[this.selectedStickerIndex]) {
+        return this.currentFrame.stickers[this.selectedStickerIndex]
+      }
+      return {
+        name: '',
+        src: '',
+        left: 200,
+        top: 200,
+        width: 100,
+        height: 100,
+        opacity: 1
+      }
     }
   },
   async mounted() {
@@ -903,14 +1069,17 @@ export default {
     }
   },
   methods: {
-    // 确保所有帧都有drawings数组
+    // 确保所有帧都有必要的数组
     ensureFramesHaveDrawings() {
       this.frames.forEach(frame => {
         if (!frame.drawings) {
           frame.drawings = []
         }
+        if (!frame.stickers) {
+          frame.stickers = []
+        }
       })
-      console.log('已确保所有帧都有drawings数组')
+      console.log('已确保所有帧都有drawings和stickers数组')
     },
 
     async loadFrames() {
@@ -937,7 +1106,7 @@ export default {
               img: img,
               texts: frameData.texts || [],
               drawings: frameData.drawings || [],
-              drawings: frameData.drawings || []
+              stickers: frameData.stickers || []
             })
           }
           console.log(`Loaded ${this.frames.length} custom frames`)
@@ -999,7 +1168,8 @@ export default {
           src: dataUrl,
           img: img,
           texts: [],
-          drawings: []
+          drawings: [],
+          stickers: []
         })
       }
       
@@ -1093,6 +1263,181 @@ export default {
       const files = event.dataTransfer.files
       if (files.length > 0) {
         this.processImageFile(files[0], true)
+      }
+    },
+
+    // 贴图上传功能
+    showStickerUpload() {
+      this.showStickerUploadModal = true
+    },
+
+    closeStickerUpload() {
+      this.showStickerUploadModal = false
+    },
+
+    handleStickerUpload(event) {
+      const file = event.target.files[0]
+      if (file) {
+        this.processStickerFile(file)
+      }
+    },
+
+    handleStickerDrop(event) {
+      const files = event.dataTransfer.files
+      if (files.length > 0) {
+        this.processStickerFile(files[0])
+      }
+    },
+
+    async processStickerFile(file) {
+      this.isProcessingSticker = true
+      
+      try {
+        // 验证文件类型
+        if (!file.type.startsWith('image/')) {
+          throw new Error('请选择图片文件')
+        }
+        
+        // 将文件转换为 base64 数据URL
+        const reader = new FileReader()
+        
+        reader.onload = (e) => {
+          const dataUrl = e.target.result
+          
+          // 创建图片对象测试加载
+          const img = new Image()
+          
+          img.onload = () => {
+            // 使用 base64 数据URL，这样不会失效
+            this.addStickerToCurrentFrame(dataUrl, file.name, img.naturalWidth, img.naturalHeight)
+            this.isProcessingSticker = false
+            this.showStickerUploadModal = false
+          }
+          
+          img.onerror = () => {
+            console.error('图片加载失败')
+            alert('图片加载失败，请尝试其他格式')
+            this.isProcessingSticker = false
+          }
+          
+          img.src = dataUrl
+        }
+        
+        reader.onerror = () => {
+          throw new Error('文件读取失败')
+        }
+        
+        // 读取文件为 data URL
+        reader.readAsDataURL(file)
+        
+      } catch (error) {
+        console.error('贴图处理失败:', error)
+        alert(`贴图处理失败: ${error.message}`)
+        this.isProcessingSticker = false
+      }
+    },
+
+    addStickerToCurrentFrame(src, name, originalWidth, originalHeight) {
+      // 确保当前帧有stickers数组
+      if (!this.currentFrame.stickers) {
+        this.currentFrame.stickers = []
+      }
+      
+      // 计算合适的贴图尺寸（限制在画布尺寸内）
+      const maxSize = Math.min(this.canvasSize.width, this.canvasSize.height) / 3
+      const scale = Math.min(maxSize / originalWidth, maxSize / originalHeight, 1)
+      const width = originalWidth * scale
+      const height = originalHeight * scale
+      
+      // 创建贴图对象
+      const sticker = {
+        src: src,
+        name: name || `贴图${this.currentFrame.stickers.length + 1}`,
+        left: this.canvasSize.width / 2 - width / 2,
+        top: this.canvasSize.height / 2 - height / 2,
+        width: width,
+        height: height,
+        opacity: 1
+      }
+      
+      // 添加到当前帧
+      this.currentFrame.stickers.push(sticker)
+      
+      // 选中新添加的贴图
+      this.selectedStickerIndex = this.currentFrame.stickers.length - 1
+      
+      // 重新渲染画布
+      this.drawCurrentFrame()
+      
+      console.log('贴图已添加到当前帧:', sticker)
+    },
+
+    // 贴图编辑功能
+    selectSticker(index) {
+      this.selectedStickerIndex = index
+      this.selectedTextIndex = -1 // 取消文字选择
+      this.drawCurrentFrame()
+    },
+
+    updateSticker() {
+      if (this.selectedStickerIndex !== -1 && this.currentFrame.stickers && this.currentFrame.stickers[this.selectedStickerIndex]) {
+        // 查找画布上对应的贴图对象
+        const fabricObjects = this.fabricCanvas.getObjects()
+        const stickerObject = fabricObjects.find(obj => obj.stickerDataIndex === this.selectedStickerIndex)
+        
+        if (stickerObject) {
+          const stickerData = this.currentSticker
+          
+          // 更新Fabric.js对象的属性
+          stickerObject.set({
+            left: stickerData.left,
+            top: stickerData.top,
+            scaleX: stickerData.width / stickerObject.getElement().naturalWidth,
+            scaleY: stickerData.height / stickerObject.getElement().naturalHeight,
+            opacity: stickerData.opacity
+          })
+          
+          // 重新渲染画布
+          this.fabricCanvas.renderAll()
+          
+          console.log('贴图属性已更新:', stickerData)
+        } else {
+          // 如果找不到对应的对象，重新渲染整个画布
+          this.drawCurrentFrame()
+        }
+      }
+    },
+
+    updateStickerFromFabricObject() {
+      if (this.selectedStickerIndex !== -1 && this.currentFrame.stickers && this.currentFrame.stickers[this.selectedStickerIndex]) {
+        const activeObject = this.fabricCanvas.getActiveObject()
+        if (activeObject && activeObject.stickerDataIndex === this.selectedStickerIndex) {
+          const stickerData = this.currentFrame.stickers[this.selectedStickerIndex]
+          
+          // 更新位置
+          stickerData.left = activeObject.left
+          stickerData.top = activeObject.top
+          
+          // 更新尺寸（根据缩放计算）
+          if (activeObject.getElement) {
+            const element = activeObject.getElement()
+            stickerData.width = element.naturalWidth * activeObject.scaleX
+            stickerData.height = element.naturalHeight * activeObject.scaleY
+          }
+          
+          // 更新透明度
+          stickerData.opacity = activeObject.opacity || 1
+          
+          console.log('从画布更新贴图数据:', stickerData)
+        }
+      }
+    },
+
+    deleteSelectedSticker() {
+      if (this.selectedStickerIndex !== -1 && this.currentFrame.stickers && this.currentFrame.stickers[this.selectedStickerIndex]) {
+        this.currentFrame.stickers.splice(this.selectedStickerIndex, 1)
+        this.selectedStickerIndex = -1
+        this.drawCurrentFrame()
       }
     },
 
@@ -1339,6 +1684,7 @@ export default {
               img: img,
               texts: [],
               drawings: [],
+              stickers: [],
               delay: frameDelay
             })
             
@@ -1346,6 +1692,7 @@ export default {
               dataUrl: dataUrl,
               texts: [],
               drawings: [],
+              stickers: [],
               delay: frameDelay
             })
             
@@ -1523,13 +1870,15 @@ export default {
               src: dataUrl,
               img: img,
               texts: [],
-              drawings: []
+              drawings: [],
+              stickers: []
             })
             
             processedFrames.push({
               dataUrl: dataUrl,
               texts: [],
-              drawings: []
+              drawings: [],
+              stickers: []
             })
             
           } catch (frameError) {
@@ -1674,12 +2023,16 @@ export default {
             this.frames.push({
               src: dataUrl,
               img: img,
-              texts: []
+              texts: [],
+              drawings: [],
+              stickers: []
             })
             
             processedFrames.push({
               dataUrl: dataUrl,
-              texts: []
+              texts: [],
+              drawings: [],
+              stickers: []
             })
             
           } catch (frameError) {
@@ -1846,12 +2199,16 @@ export default {
             this.frames.push({
               src: dataUrl,
               img: frameImg,
-              texts: []
+              texts: [],
+              drawings: [],
+              stickers: []
             })
             
             processedFrames.push({
               dataUrl: dataUrl,
-              texts: []
+              texts: [],
+              drawings: [],
+              stickers: []
             })
             
             frameIndex++
@@ -1996,12 +2353,16 @@ export default {
                      src: dataUrl,
                      img: img,
                      texts: [],
+                     drawings: [],
+                     stickers: [],
                      delay: 100
                    })
                    
                    processedFrames.push({
                      dataUrl: dataUrl,
                      texts: [],
+                     drawings: [],
+                     stickers: [],
                      delay: 100
                    })
                    
@@ -2170,12 +2531,16 @@ export default {
             src: dataUrl,
             img: img,
             texts: [],
+            drawings: [],
+            stickers: [],
             delay: 100
           })
           
           processedFrames.push({
             dataUrl: dataUrl,
             texts: [],
+            drawings: [],
+            stickers: [],
             delay: 100
           })
         }
@@ -2301,13 +2666,17 @@ export default {
           this.frames.push({
             src: frameDataUrl,
             img: frameImg,
-            texts: []
+            texts: [],
+            drawings: [],
+            stickers: []
           })
           
           // 保存处理后的帧数据
           processedFrames.push({
             dataUrl: frameDataUrl,
-            texts: []
+            texts: [],
+            drawings: [],
+            stickers: []
           })
         }
         
@@ -2366,7 +2735,9 @@ export default {
         for (let i = 0; i < frameCount; i++) {
           frames.push({
             dataUrl: dataUrl,
-            texts: []
+            texts: [],
+            drawings: [],
+            stickers: []
           })
         }
 
@@ -2394,7 +2765,9 @@ export default {
           this.frames.push({
             src: frameData.dataUrl,
             img: frameImg,
-            texts: frameData.texts || []
+            texts: frameData.texts || [],
+            drawings: frameData.drawings || [],
+            stickers: frameData.stickers || []
           })
         }
 
@@ -2438,7 +2811,9 @@ export default {
         for (let i = 0; i < frameCount; i++) {
           frames.push({
             dataUrl: dataUrl,
-            texts: []
+            texts: [],
+            drawings: [],
+            stickers: []
           })
         }
 
@@ -2466,7 +2841,9 @@ export default {
           this.frames.push({
             src: frameData.dataUrl,
             img: frameImg,
-            texts: frameData.texts || []
+            texts: frameData.texts || [],
+            drawings: frameData.drawings || [],
+            stickers: frameData.stickers || []
           })
         }
 
@@ -2564,11 +2941,17 @@ export default {
 
           this.fabricCanvas.on('selection:cleared', () => {
             this.selectedTextIndex = -1
+            this.selectedStickerIndex = -1
           })
 
           // 监听对象修改
           this.fabricCanvas.on('object:modified', (e) => {
-            this.updateTextFromFabricObject()
+            const obj = e.target
+            if (obj && obj.textDataIndex !== undefined) {
+              this.updateTextFromFabricObject()
+            } else if (obj && obj.stickerDataIndex !== undefined) {
+              this.updateStickerFromFabricObject()
+            }
           })
 
           // 监听鼠标事件 - 提供更好的交互体验
@@ -2576,6 +2959,7 @@ export default {
             if (!e.target) {
               // 点击空白区域时取消选择
               this.selectedTextIndex = -1
+              this.selectedStickerIndex = -1
             }
           })
 
@@ -2640,6 +3024,7 @@ export default {
       
       this.currentFrameIndex = index
       this.selectedTextIndex = -1
+      this.selectedStickerIndex = -1
       this.drawCurrentFrame()
     },
 
@@ -2682,6 +3067,10 @@ export default {
         console.log('Adding drawings to canvas...')
         this.addDrawingsToCanvas()
         
+        // 添加贴图
+        console.log('Adding stickers to canvas...')
+        this.addStickersToCanvas()
+        
         // 恢复画笔模式状态
         this.fabricCanvas.isDrawingMode = this.isDrawingMode
         if (this.isDrawingMode && this.fabricCanvas.freeDrawingBrush) {
@@ -2712,6 +3101,7 @@ export default {
           this.fabricCanvas.add(img)
           this.addTextsToCanvas()
           this.addDrawingsToCanvas()
+          this.addStickersToCanvas()
           
           // 恢复画笔模式状态
           this.fabricCanvas.isDrawingMode = this.isDrawingMode
@@ -2783,6 +3173,47 @@ export default {
       })
     },
 
+    addStickersToCanvas() {
+      const frame = this.currentFrame
+      if (!frame.stickers || frame.stickers.length === 0) {
+        return
+      }
+      
+      frame.stickers.forEach((stickerData, index) => {
+        try {
+          // 使用FabricImage.fromURL加载贴图
+          FabricImage.fromURL(stickerData.src, {
+            crossOrigin: 'anonymous'
+          }).then((img) => {
+            img.set({
+              left: stickerData.left,
+              top: stickerData.top,
+              scaleX: stickerData.width / img.width,
+              scaleY: stickerData.height / img.height,
+              opacity: stickerData.opacity,
+              selectable: true,
+              evented: true,
+              stickerDataIndex: index,
+              // 贴图样式设置
+              transparentCorners: false,
+              cornerColor: '#22c55e',
+              cornerStyle: 'rect',
+              borderColor: '#22c55e',
+              rotatingPointOffset: 40
+            })
+            
+            this.fabricCanvas.add(img)
+            this.fabricCanvas.renderAll()
+            console.log('添加了一个贴图')
+          }).catch((error) => {
+            console.error('贴图加载失败:', error)
+          })
+        } catch (error) {
+          console.error('添加贴图失败:', error)
+        }
+      })
+    },
+
     handleCanvasClick(e) {
       if (this.fabricCanvas.getActiveObject()) return
 
@@ -2837,6 +3268,10 @@ export default {
     handleObjectSelection(obj) {
       if (obj && obj.textDataIndex !== undefined) {
         this.selectedTextIndex = obj.textDataIndex
+        this.selectedStickerIndex = -1
+      } else if (obj && obj.stickerDataIndex !== undefined) {
+        this.selectedStickerIndex = obj.stickerDataIndex
+        this.selectedTextIndex = -1
       }
     },
 
@@ -2999,11 +3434,29 @@ export default {
             textData.top = obj.top
           }
         }
+        
+        // 更新贴图位置和属性
+        if (obj.stickerDataIndex !== undefined) {
+          const stickerData = this.currentFrame.stickers[obj.stickerDataIndex]
+          if (stickerData) {
+            stickerData.left = obj.left
+            stickerData.top = obj.top
+            
+            // 更新尺寸（根据缩放计算）
+            if (obj.getElement) {
+              const element = obj.getElement()
+              stickerData.width = element.naturalWidth * obj.scaleX
+              stickerData.height = element.naturalHeight * obj.scaleY
+            }
+            
+            stickerData.opacity = obj.opacity || 1
+          }
+        }
       })
       
       // 保存涂鸦路径
       const drawings = fabricObjects.filter(obj => 
-        obj.type === 'path' && obj.textDataIndex === undefined
+        obj.type === 'path' && obj.textDataIndex === undefined && obj.stickerDataIndex === undefined
       )
       
       // 确保当前帧有drawings数组
@@ -3025,7 +3478,7 @@ export default {
         angle: path.angle
       }))
       
-      console.log(`保存了 ${this.currentFrame.drawings.length} 个涂鸦路径`)
+      console.log(`保存了 ${this.currentFrame.drawings.length} 个涂鸦路径 和 ${this.currentFrame.stickers ? this.currentFrame.stickers.length : 0} 个贴图`)
     },
 
     // 播放控制方法
@@ -3067,6 +3520,7 @@ export default {
       // 切换到下一帧
       this.currentFrameIndex = (this.currentFrameIndex + 1) % this.frames.length
       this.selectedTextIndex = -1
+      this.selectedStickerIndex = -1
       this.drawCurrentFrame()
     },
 
@@ -3079,6 +3533,7 @@ export default {
         ? this.frames.length - 1 
         : this.currentFrameIndex - 1
       this.selectedTextIndex = -1
+      this.selectedStickerIndex = -1
       this.drawCurrentFrame()
     },
 
@@ -3106,6 +3561,7 @@ export default {
 
       // 重新绘制当前帧
       this.selectedTextIndex = -1
+      this.selectedStickerIndex = -1
       this.drawCurrentFrame()
 
       console.log('帧顺序已切换到:', this.frameOrder)
@@ -3114,10 +3570,12 @@ export default {
     applyToAllFrames() {
       const hasTexts = this.currentFrame.texts.length > 0
       const hasDrawings = this.currentFrame.drawings && this.currentFrame.drawings.length > 0
+      const hasStickers = this.currentFrame.stickers && this.currentFrame.stickers.length > 0
       
       // 设置默认选择（只选择有内容的项目）
       this.applyTexts = hasTexts
       this.applyDrawings = hasDrawings
+      this.applyStickers = hasStickers
       
       // 设置默认范围
       this.applyStartFrame = 0
@@ -3129,14 +3587,15 @@ export default {
       // 检查是否有任何内容可以应用
       const hasTexts = this.currentFrame.texts.length > 0
       const hasDrawings = this.currentFrame.drawings && this.currentFrame.drawings.length > 0
+      const hasStickers = this.currentFrame.stickers && this.currentFrame.stickers.length > 0
       
-      if (!hasTexts && !hasDrawings) {
-        alert('当前帧没有文字或涂抹内容可以应用')
+      if (!hasTexts && !hasDrawings && !hasStickers) {
+        alert('当前帧没有文字、涂抹或贴图内容可以应用')
         return
       }
 
       // 检查是否有选择的内容
-      if (!this.applyTexts && !this.applyDrawings) {
+      if (!this.applyTexts && !this.applyDrawings && !this.applyStickers) {
         alert('请至少选择一种内容进行应用')
         return
       }
@@ -3149,6 +3608,11 @@ export default {
       
       if (this.applyDrawings && !hasDrawings) {
         alert('当前帧没有涂抹可以应用')
+        return
+      }
+      
+      if (this.applyStickers && !hasStickers) {
+        alert('当前帧没有贴图可以应用')
         return
       }
 
@@ -3179,6 +3643,16 @@ export default {
           this.frames[i].drawings = currentDrawings
         }
         
+        // 应用贴图
+        if (this.applyStickers && this.currentFrame.stickers && this.currentFrame.stickers.length > 0) {
+          // 确保目标帧有stickers数组
+          if (!this.frames[i].stickers) {
+            this.frames[i].stickers = []
+          }
+          const currentStickers = JSON.parse(JSON.stringify(this.currentFrame.stickers))
+          this.frames[i].stickers = currentStickers
+        }
+        
         appliedCount++
       }
 
@@ -3188,6 +3662,9 @@ export default {
       }
       if (this.applyDrawings && this.currentFrame.drawings && this.currentFrame.drawings.length > 0) {
         appliedItems.push('涂抹')
+      }
+      if (this.applyStickers && this.currentFrame.stickers && this.currentFrame.stickers.length > 0) {
+        appliedItems.push('贴图')
       }
 
       this.showApplyModal = false
@@ -3474,7 +3951,8 @@ export default {
         frames: this.frames.map(frame => ({
           src: frame.src,
           texts: JSON.parse(JSON.stringify(frame.texts)),
-          drawings: JSON.parse(JSON.stringify(frame.drawings || []))
+          drawings: JSON.parse(JSON.stringify(frame.drawings || [])),
+          stickers: JSON.parse(JSON.stringify(frame.stickers || []))
         })),
         settings: {
           gifDelay: this.gifDelay,
@@ -3488,7 +3966,8 @@ export default {
           frames: this.originalImageData?.frames || this.frames.map(frame => ({
             dataUrl: frame.src,
             texts: frame.texts,
-            drawings: frame.drawings || []
+            drawings: frame.drawings || [],
+            stickers: frame.stickers || []
           })),
           gifInfo: this.originalImageData?.gifInfo || null
         } : null,
@@ -3628,22 +4107,24 @@ export default {
         this.canvasSize = { ...project.settings.canvasSize }
       }
 
-      // 检查是否只应用文字和涂抹数据
+      // 检查是否只应用文字、涂抹和贴图数据
       if (onlyTextAndDrawings) {
-        console.log('Applying only texts and drawings - keeping current images')
+        console.log('Applying only texts, drawings and stickers - keeping current images')
         
         // 保持当前图片状态，不重新加载图片
-        // 只清空现有的文字和涂抹，然后应用新的
+        // 只清空现有的文字、涂抹和贴图，然后应用新的
         this.frames.forEach(frame => {
           frame.texts = []
           frame.drawings = []
+          frame.stickers = []
         })
         
-        // 应用文字和涂抹数据
+        // 应用文字、涂抹和贴图数据
         project.frames.forEach((savedFrame, index) => {
           if (this.frames[index]) {
             this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
             this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
+            this.frames[index].stickers = JSON.parse(JSON.stringify(savedFrame.stickers || []))
           }
         })
         
@@ -3662,11 +4143,12 @@ export default {
         // 重新加载帧（这会使用 originalImageData）
         await this.loadFrames()
         
-        // 应用文字和涂抹数据
+        // 应用文字、涂抹和贴图数据
         project.frames.forEach((savedFrame, index) => {
           if (this.frames[index]) {
             this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
             this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
+            this.frames[index].stickers = JSON.parse(JSON.stringify(savedFrame.stickers || []))
           }
         })
         
@@ -3676,17 +4158,19 @@ export default {
         console.log('Loading project without images - keeping current images')
         
         // 保持当前图片状态，不重新加载图片
-        // 只清空现有的文字和涂抹，然后应用新的
+        // 只清空现有的文字、涂抹和贴图，然后应用新的
         this.frames.forEach(frame => {
           frame.texts = []
           frame.drawings = []
+          frame.stickers = []
         })
         
-        // 应用文字和涂抹数据
+        // 应用文字、涂抹和贴图数据
         project.frames.forEach((savedFrame, index) => {
           if (this.frames[index]) {
             this.frames[index].texts = JSON.parse(JSON.stringify(savedFrame.texts))
             this.frames[index].drawings = JSON.parse(JSON.stringify(savedFrame.drawings || []))
+            this.frames[index].stickers = JSON.parse(JSON.stringify(savedFrame.stickers || []))
           }
         })
         
@@ -3702,6 +4186,7 @@ export default {
       // 重置当前状态
       this.currentFrameIndex = 0
       this.selectedTextIndex = -1
+      this.selectedStickerIndex = -1
     },
 
     // 快速填充相同文字
@@ -4001,7 +4486,8 @@ export default {
           frames: this.frames.map(frame => ({
             src: frame.src,
             texts: JSON.parse(JSON.stringify(frame.texts)),
-            drawings: JSON.parse(JSON.stringify(frame.drawings || []))
+            drawings: JSON.parse(JSON.stringify(frame.drawings || [])),
+            stickers: JSON.parse(JSON.stringify(frame.stickers || []))
           })),
           settings: {
             gifDelay: this.gifDelay,
@@ -4014,7 +4500,8 @@ export default {
             frames: this.originalImageData?.frames || this.frames.map(frame => ({
               dataUrl: frame.src,
               texts: frame.texts,
-              drawings: frame.drawings || []
+              drawings: frame.drawings || [],
+              stickers: frame.stickers || []
             })),
             gifInfo: this.originalImageData?.gifInfo || null
           } : null,
@@ -4084,7 +4571,7 @@ export default {
           localStorage.setItem('gif-editor-projects', JSON.stringify(this.savedProjects))
           
           // 询问用户是否立即应用预设
-          if (confirm(`预设 "${preset.name}" 下载成功！\n\n是否立即应用到当前图片？（只会应用文字和涂抹，不会更改图片）`)) {
+          if (confirm(`预设 "${preset.name}" 下载成功！\n\n是否立即应用到当前图片？（只会应用文字、涂抹和贴图，不会更改图片）`)) {
             try {
               await this.applyProjectData(projectData, true)
               alert('预设已成功应用到当前图片！')
@@ -5235,13 +5722,30 @@ canvas {
   margin-top: auto;
 }
 
-.preset-author {
+.preset-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-author,
+.preset-date {
   font-size: 11px;
   color: #6c757d;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 120px;
+}
+
+.preset-author {
+  color: #495057;
+}
+
+.preset-date {
+  color: #6c757d;
+  font-size: 10px;
 }
 
 .preset-card-actions {
@@ -5619,4 +6123,121 @@ canvas {
       grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     }
   }
+
+/* 贴图相关样式 */
+.stickers-list {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.stickers-list h4 {
+  margin: 0 0 10px 0;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sticker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 5px 0;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+}
+
+.sticker-item:hover {
+  background: rgba(255, 255, 255, 0.15);
+  transform: translateY(-1px);
+}
+
+.sticker-item.active {
+  background: rgba(34, 197, 94, 0.2);
+  border-color: #22c55e;
+  box-shadow: 0 0 10px rgba(34, 197, 94, 0.3);
+}
+
+.sticker-thumbnail {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.sticker-name {
+  flex: 1;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.9;
+}
+
+.sticker-item.active .sticker-name {
+  opacity: 1;
+  font-weight: 600;
+}
+
+/* 贴图预览样式 */
+.sticker-preview-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+  padding: 4px 8px;
+  background: rgba(34, 197, 94, 0.1);
+  border-radius: 6px;
+  font-size: 12px;
+  color: #ffffff;
+}
+
+.mini-sticker-preview {
+  width: 20px;
+  height: 20px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* 贴图设置样式 */
+.sticker-settings {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid rgba(255, 255, 255, 0.1);
+}
+
+.no-sticker-selected {
+  text-align: center;
+  padding: 20px;
+  color: rgba(255, 255, 255, 0.7);
+  font-style: italic;
+}
+
+.sticker-controls .setting-group {
+  margin-bottom: 15px;
+}
+
+/* 贴图上传模态框样式 */
+.upload-sticker-modal {
+  width: 500px;
+  max-width: 90vw;
+}
+
+.upload-sticker-info {
+  background: #fff3cd;
+  padding: 15px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid #ffeaa7;
+}
+
+.upload-sticker-info p {
+  margin: 5px 0;
+  color: #856404;
+}
 </style>
